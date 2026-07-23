@@ -307,6 +307,25 @@
       line-height: 1.4;
     }
 
+    .credit {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: var(--faint);
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .credit a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .credit a:hover {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
     .hint a {
       color: var(--muted);
       text-decoration: underline;
@@ -387,7 +406,7 @@
     </button>
     <div id="status">Ready</div>
     <p class="hint">Install page fonts in Figma for the closest match.</p>
-    <p class="hint">Vibe coded by <a href="https://kevbry.in" target="_blank" rel="noopener noreferrer">Kevin</a> · kevbry.in</p>
+    <p class="credit">Vibe coded by <a href="https://kevbry.in" target="_blank" rel="noopener noreferrer">Kevin</a></p>
   </div>
 
   <!-- Isolated browser document used for layout measurement. -->
