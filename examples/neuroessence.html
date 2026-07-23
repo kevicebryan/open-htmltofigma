@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroEssence — My Health Essence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#16413D; --teal-deep:#0D2C29; --teal-soft:#2C5C56;
+    --terracotta:#C2694A; --terracotta-deep:#A6543A;
+    --parchment:#F7F1E4; --parchment-dim:#EFE5D0;
+    --gold:#C9A05D; --ink:#26211B; --ink-soft:#5B5045;
+    --line: rgba(38,33,27,0.12); --max: 1180px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--parchment); color:var(--ink); font-family:'Figtree',sans-serif; -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'Playfair Display', serif; font-weight:600; margin:0; color:var(--teal-deep); letter-spacing:-0.01em;}
+  p{margin:0;}
+  a{color:inherit; text-decoration:none;}
+  img{max-width:100%; display:block;}
+  .wrap{max-width:var(--max); margin:0 auto; padding:0 32px;}
+  .eyebrow{font-size:12.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--terracotta); display:inline-block; margin-bottom:16px;}
+  .devnote{background:rgba(194,105,74,0.12); color:var(--terracotta-deep); font-size:12px; font-weight:600; padding:8px 14px; border-radius:3px; display:inline-block; margin-top:14px;}
+  header{background:var(--parchment); border-bottom:1px solid var(--line);}
+  nav.wrap{display:flex; align-items:center; justify-content:space-between; padding:20px 32px;}
+  .logo{font-family:'Playfair Display',serif; font-weight:700; font-size:20px; color:var(--teal-deep);}
+  .hero{padding:40px 0 70px; background:var(--parchment);}
+  .hero-grid{display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:start;}
+  .gallery-main{aspect-ratio:1/1; border-radius:4px; position:relative; overflow:hidden; background:radial-gradient(120% 90% at 30% 20%, rgba(201,160,93,0.35), transparent 60%), linear-gradient(160deg, #EFE5D0, #E4D6B8 55%, #C9A05D 130%); margin-bottom:14px;}
+  .gallery-main .tag{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:700; color:var(--teal-deep);}
+  .thumbs{display:grid; grid-template-columns:repeat(6,1fr); gap:8px;}
+  .thumb{aspect-ratio:1/1; background:var(--parchment-dim); border:1px solid var(--line); border-radius:3px;}
+  .hero-info h1{font-size:clamp(28px,3vw,36px); line-height:1.15; margin-bottom:16px;}
+  .hero-info .sub{font-size:15px; color:var(--ink-soft); line-height:1.65; margin-bottom:22px;}
+  .badge-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; margin-bottom:24px;}
+  .badge-item{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--ink-soft);}
+  .badge-item svg{width:18px; height:18px; stroke:var(--terracotta); flex-shrink:0;}
+  .price-now{font-family:'Playfair Display',serif; font-size:28px; color:var(--teal-deep);}
+  .price-note{font-size:12px; color:var(--ink-soft); margin-bottom:20px;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:16px 28px; border-radius:2px; font-size:14.5px; font-weight:700; letter-spacing:0.02em; border:none; cursor:pointer; width:100%;}
+  .btn-primary{background:var(--terracotta); color:var(--parchment);}
+  .rating-strip{display:flex; align-items:center; gap:16px; font-size:12.5px; color:var(--ink-soft); margin-top:16px; flex-wrap:wrap;}
+  .rating-strip .stars{color:var(--gold); letter-spacing:2px;}
+  .reviews{background:#fff; padding:90px 0;}
+  .section-head{max-width:620px; margin:0 auto 48px; text-align:center;}
+  .section-head h2{font-size:clamp(28px,3.2vw,38px); line-height:1.15; margin-bottom:14px;}
+  .section-head p{color:var(--ink-soft); font-size:15.5px;}
+  .featured-review{display:grid; grid-template-columns:1.3fr 1fr; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; margin-bottom:30px;}
+  .fr-quote{padding:36px 40px; background:var(--parchment-dim);}
+  .fr-quote .stars{color:var(--gold); letter-spacing:2px; margin-bottom:16px; display:block;}
+  .fr-quote p{font-size:16px; line-height:1.7; color:var(--ink); margin-bottom:18px; font-style:italic;}
+  .fr-quote .who{font-size:13px; font-weight:700; color:var(--teal-deep);}
+  .fr-mentions{padding:36px 40px; background:#fff;}
+  .fr-mentions h5{font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:18px; font-weight:700;}
+  .fr-mentions ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;}
+  .fr-mentions li{font-size:14px; color:var(--ink); display:flex; align-items:center; gap:10px;}
+  .fr-mentions li::before{content:"✓"; color:var(--terracotta); font-weight:700;}
+  .review-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-bottom:40px;}
+  .review-card{background:var(--parchment-dim); border:1px solid var(--line); border-radius:4px; padding:26px;}
+  .review-card .stars{color:var(--gold); letter-spacing:2px; font-size:13px; margin-bottom:14px; display:block;}
+  .review-card p{font-size:14px; line-height:1.6; color:var(--ink); margin-bottom:16px;}
+  .review-card .who{font-size:12.5px; font-weight:700; color:var(--teal-deep);}
+  .trust-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:20px; padding:26px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:26px;}
+  .trust-strip .t-item{text-align:center; font-size:11.5px; color:var(--ink-soft);}
+  .trust-strip svg{width:22px; height:22px; stroke:var(--terracotta); margin-bottom:8px;}
+  .why-band{background:var(--teal-deep); color:var(--parchment); padding:70px 0;}
+  .why-head{text-align:center; max-width:640px; margin:0 auto 40px;}
+  .why-head .eyebrow{color:var(--gold);}
+  .why-head h3{color:var(--parchment); font-size:clamp(24px,2.6vw,30px); margin-bottom:12px;}
+  .why-head p{color:rgba(247,241,228,0.7); font-size:15px; line-height:1.6;}
+  .why-icons{display:grid; grid-template-columns:repeat(5,1fr); gap:20px; margin-bottom:40px;}
+  .why-icon{text-align:center; font-size:12px;}
+  .why-icon svg{width:26px; height:26px; stroke:var(--gold); margin-bottom:12px;}
+  .why-icon .t{font-weight:700; margin-bottom:4px;}
+  .why-icon .s{color:rgba(247,241,228,0.6); font-size:11px; line-height:1.4;}
+  .cat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin:50px 0 30px;}
+  .cat-card{background:#fff; padding:30px 24px; text-align:center;}
+  .bar-track{height:9px; background:rgba(38,33,27,0.08); border-radius:6px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:6px; background:linear-gradient(90deg, var(--terracotta), var(--gold));}
+  .faq{background:var(--parchment); padding:90px 0;}
+  .faq-cols{display:grid; grid-template-columns:1fr 1fr; gap:40px;}
+  .faq-item{border-bottom:1px solid var(--line);}
+  .faq-q{width:100%; text-align:left; background:none; border:none; padding:20px 2px; font-size:14.5px; font-weight:600; color:var(--teal-deep); font-family:'Figtree',sans-serif;}
+  .faq-a{max-height:0; overflow:hidden;}
+  .faq-a p{padding:0 2px 20px; font-size:13.5px; color:var(--ink-soft); line-height:1.6;}
+  footer{background:var(--teal-deep); color:rgba(247,241,228,0.7); padding:60px 0 28px;}
+</style>
+</head>
+<body>
+<header><nav class="wrap"><div class="logo">My Health <em style="font-style:italic; color:var(--terracotta);">Essence</em></div></nav></header>
+<section class="hero"><div class="wrap hero-grid">
+  <div><div class="gallery-main"><span class="tag">Front-of-bottle product photo</span></div></div>
+  <div class="hero-info">
+    <span class="eyebrow">TGA-Listed Herbal Medicine</span>
+    <h1>For the days your mind has too much to carry.</h1>
+    <p class="sub">NeuroEssence is a TGA-listed herbal medicine combining nine botanical extracts.</p>
+    <div class="badge-grid">
+      <div class="badge-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/></svg>TGA Listed</div>
+      <div class="badge-item"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg>Made in Australia</div>
+    </div>
+    <div class="price-now">$89.00 AUD</div>
+    <button class="btn btn-primary">Add to Cart — $89 AUD</button>
+  </div>
+</div></section>
+<section class="reviews"><div class="wrap">
+  <div class="section-head"><span class="eyebrow">Customer Reviews</span><h2>See why customers choose NeuroEssence.</h2></div>
+  <div class="featured-review">
+    <div class="fr-quote"><span class="stars">★★★★★</span><p>"NeuroEssence is a great product."</p><div class="who">George V.</div></div>
+    <div class="fr-mentions"><h5>What customers mention most</h5><ul><li>Greater mental clarity</li><li>Improved focus</li></ul></div>
+  </div>
+</div></section>
+<section class="why-band"><div class="wrap"><div class="why-head"><span class="eyebrow">Thoughtfully Formulated</span><h3>Backed by nature.</h3></div></div></section>
+<footer><div class="wrap"><div class="foot-logo" style="font-family:'Playfair Display',serif;font-size:20px;color:#F7F1E4;">My Health Essence</div></div></footer>
+</body>
+</html>

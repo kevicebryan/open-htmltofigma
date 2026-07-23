@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, Helvetica, sans-serif; }
+    .page {
+      width: 800px;
+      padding: 40px;
+      background: #f4f7fb;
+    }
+    .hero-section {
+      background: #1b3a4b;
+      color: #fff;
+      border-radius: 16px;
+      padding: 32px;
+      border: 2px solid #0d2130;
+    }
+    .hero-section h1 {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 44px;
+      margin-bottom: 12px;
+    }
+    .hero-section p {
+      font-size: 16px;
+      line-height: 24px;
+      opacity: 0.9;
+    }
+    .cards {
+      display: flex;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .card {
+      flex: 1;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #1b3a4b;
+    }
+    .card p {
+      font-size: 14px;
+      line-height: 20px;
+      color: #445;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero-section">
+      <h1>Hello from HTML</h1>
+      <p>This block should become nested Figma frames with text layers.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h2>Card one</h2>
+        <p>Background, border, and radius map to fills and strokes.</p>
+      </div>
+      <div class="card">
+        <h2>Card two</h2>
+        <p>Layer nesting mirrors the DOM tree.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

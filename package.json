@@ -1,0 +1,29 @@
+{
+  "name": "open-htmltofigma",
+  "version": "1.0.0",
+  "description": "Open-source Figma plugin that converts local HTML into nested Figma frames and layers",
+  "license": "MIT",
+  "author": "Kevin Bryan <https://kevbry.in>",
+  "homepage": "https://kevbry.in",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/open-htmltofigma.git"
+  },
+  "keywords": [
+    "figma",
+    "figma-plugin",
+    "html",
+    "converter",
+    "design",
+    "open-source"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.109.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Open HTML to Figma</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-soft: #f7f6f3;
+      --ink: #37352f;
+      --muted: #787774;
+      --faint: #9b9a97;
+      --line: #e9e9e7;
+      --line-strong: #d3d1cb;
+      --hover: #efeee9;
+      --accent: #2383e2;
+      --ok: #0f7b6c;
+      --ok-bg: #edf3f1;
+      --err: #e03e3e;
+      --err-bg: #fdebec;
+      --radius: 6px;
+      --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px 16px 14px;
+      font: 13px/1.5 var(--font);
+      color: var(--ink);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .header {
+      margin-bottom: 18px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+
+    .header p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      display: block;
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .option input {
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    /* Notion-like segmented control */
+    .segment {
+      display: flex;
+      padding: 3px;
+      gap: 2px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .segment button {
+      flex: 1;
+      margin: 0;
+      padding: 6px 4px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font: 500 11.5px/1.2 var(--font);
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .segment button:hover {
+      color: var(--ink);
+      background: rgba(55, 53, 47, 0.04);
+    }
+
+    .segment button.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 1px 2px rgba(15, 15, 15, 0.06), 0 0 0 1px rgba(15, 15, 15, 0.04);
+    }
+
+    /* File dropzone */
+    .file-zone {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--bg-soft);
+      cursor: pointer;
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+
+    .file-zone:hover {
+      border-color: var(--muted);
+      background: var(--hover);
+    }
+
+    .file-zone.has-file {
+      border-style: solid;
+      border-color: var(--line);
+      background: #fff;
+    }
+
+    .file-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .file-icon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .file-meta {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .file-meta .title {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-meta .desc {
+      font-size: 11.5px;
+      color: var(--faint);
+      margin-top: 1px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 128px;
+      resize: vertical;
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      font: 12px/1.45 var(--mono);
+      outline: none;
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    textarea::placeholder {
+      color: var(--faint);
+    }
+
+    textarea:hover {
+      background: #fcfcfb;
+    }
+
+    textarea:focus {
+      border-color: rgba(35, 131, 226, 0.55);
+      box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.15);
+      background: #fff;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 2px 0 14px;
+      color: var(--faint);
+      font-size: 11px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .primary {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--ink);
+      color: #fff;
+      font: 500 13px/1.3 var(--font);
+      cursor: pointer;
+      transition: opacity 0.12s ease, background 0.12s ease;
+    }
+
+    .primary:hover:not(:disabled) {
+      background: #2f2d28;
+    }
+
+    .primary:disabled {
+      opacity: 0.65;
+      cursor: wait;
+    }
+
+    .primary.loading {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .spinner {
+      display: none;
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    .primary.loading .spinner {
+      display: block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #status {
+      padding: 8px 10px;
+      min-height: 0;
+      border-radius: var(--radius);
+      background: var(--bg-soft);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #status.ok {
+      background: var(--ok-bg);
+      color: var(--ok);
+    }
+
+    #status.error {
+      background: var(--err-bg);
+      color: var(--err);
+    }
+
+    .hint {
+      margin: 0;
+      font-size: 11.5px;
+      color: var(--faint);
+      line-height: 1.4;
+    }
+
+    .hint a {
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .hint a:hover {
+      color: var(--ink);
+    }
+
+    /* Keep the measure iframe in-viewport. Off-screen / visibility:hidden
+       iframes are often throttled inside Figma's plugin UI, which yields
+       empty or collapsed layout measurements. */
+    #render-host {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Open HTML to Figma</h1>
+    <p>Import a local HTML file as nested layers.</p>
+  </div>
+
+  <div class="field">
+    <span class="field-label">Viewport</span>
+    <div class="segment" id="viewports">
+      <button type="button" data-w="1440" class="active">Desktop</button>
+      <button type="button" data-w="1280">Laptop</button>
+      <button type="button" data-w="768">Tablet</button>
+      <button type="button" data-w="390">Mobile</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="option">
+      <input id="as-component" type="checkbox" />
+      Create the imported desktop as a component
+    </label>
+  </div>
+
+  <div class="field">
+    <span class="field-label">File</span>
+    <label class="file-zone" id="file-zone" for="file">
+      <input id="file" type="file" accept=".html,.htm,text/html" />
+      <div class="file-icon">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3.5 2.5h6l3 3V13.5h-9v-11z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+          <path d="M9.5 2.5V5.5H12.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="file-meta">
+        <div class="title" id="file-title">Choose HTML file</div>
+        <div class="desc" id="file-desc">.html or .htm</div>
+      </div>
+    </label>
+  </div>
+
+  <div class="divider">or paste</div>
+
+  <div class="field">
+    <span class="field-label">HTML</span>
+    <textarea id="html" placeholder="Paste your HTML here…" spellcheck="false"></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="convert" type="button">
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="convert-label">Import to Figma</span>
+    </button>
+    <div id="status">Ready</div>
+    <p class="hint">Install page fonts in Figma for the closest match.</p>
+    <p class="hint">Vibe coded by <a href="https://kevbry.in" target="_blank" rel="noopener noreferrer">Kevin</a> · kevbry.in</p>
+  </div>
+
+  <!-- Isolated browser document used for layout measurement. -->
+  <div id="render-host" aria-hidden="true"></div>
+
+  <script>
+    const fileInput = document.getElementById('file');
+    const fileZone = document.getElementById('file-zone');
+    const fileTitle = document.getElementById('file-title');
+    const fileDesc = document.getElementById('file-desc');
+    const htmlInput = document.getElementById('html');
+    const convertBtn = document.getElementById('convert');
+    const convertLabel = document.getElementById('convert-label');
+    const statusEl = document.getElementById('status');
+    const renderHost = document.getElementById('render-host');
+    const viewportBtns = document.querySelectorAll('#viewports button');
+    const asComponentInput = document.getElementById('as-component');
+
+    let viewportWidth = 1440;
+    let isImporting = false;
+    let importTimeout = null;
+    const imageStore = {}; // id -> raw base64 PNG (no data: prefix)
+
+    viewportBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        viewportBtns.forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        viewportWidth = parseInt(btn.getAttribute('data-w'), 10);
+      });
+    });
+
+    function setStatus(message, kind) {
+      statusEl.textContent = message;
+      statusEl.className = kind || '';
+    }
+
+    function setImporting(importing, label) {
+      isImporting = importing;
+      convertBtn.disabled = importing;
+      convertBtn.classList.toggle('loading', importing);
+      convertLabel.textContent = label || (importing ? 'Importing…' : 'Import to Figma');
+      if (!importing && importTimeout) {
+        clearTimeout(importTimeout);
+        importTimeout = null;
+      }
+    }
+
+    function isHtmlFile(file) {
+      if (!file) return false;
+      return /\.(html?|xhtml)$/i.test(file.name) ||
+        file.type === 'text/html' ||
+        file.type === 'application/xhtml+xml';
+    }
+
+    function resetFilePicker() {
+      fileInput.value = '';
+      fileZone.classList.remove('has-file');
+      fileTitle.textContent = 'Choose HTML file';
+      fileDesc.textContent = '.html or .htm';
+    }
+
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise(function (_, reject) {
+          setTimeout(function () {
+            reject(new Error((label || 'Operation') + ' timed out'));
+          }, ms);
+        })
+      ]);
+    }
+
+    fileInput.addEventListener('change', async function () {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (!isHtmlFile(file)) {
+        resetFilePicker();
+        setStatus('Choose an HTML file (.html or .htm). "' + file.name + '" is not supported.', 'error');
+        return;
+      }
+      try {
+        htmlInput.value = await file.text();
+        fileZone.classList.add('has-file');
+        fileTitle.textContent = file.name;
+        fileDesc.textContent = Math.max(1, Math.round(file.size / 1024)) + ' KB loaded';
+        setStatus('File loaded — ready to import');
+      } catch (err) {
+        resetFilePicker();
+        setStatus('Failed to read file: ' + err.message, 'error');
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // Colors / shadows / gradients
+    // -------------------------------------------------------------------------
+
+    function parseCssColor(css) {
+      if (!css || css === 'transparent' || css === 'none') return null;
+      const raw = String(css).trim();
+      if (!raw || raw === 'rgba(0, 0, 0, 0)' || raw === 'rgb(0 0 0 / 0)') return null;
+
+      const fromHexOrRgb = parseHexOrRgb(raw);
+      if (fromHexOrRgb) return fromHexOrRgb.a === 0 ? null : fromHexOrRgb;
+
+      // color(srgb r g b [/ a]) — channels are 0–1
+      const srgb = raw.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i);
+      if (srgb) {
+        let a = 1;
+        if (srgb[4] !== undefined) {
+          a = String(srgb[4]).indexOf('%') >= 0 ? parseFloat(srgb[4]) / 100 : parseFloat(srgb[4]);
+        }
+        if (a === 0) return null;
+        return {
+          r: clamp01(parseFloat(srgb[1])),
+          g: clamp01(parseFloat(srgb[2])),
+          b: clamp01(parseFloat(srgb[3])),
+          a: a
+        };
+      }
+
+      // lab()/oklch()/hsl(): let the canvas engine normalize to hex/rgba
+      try {
+        const canvas = parseCssColor._canvas || (parseCssColor._canvas = document.createElement('canvas'));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        const sentinel = '#abcdef';
+        ctx.fillStyle = sentinel;
+        ctx.fillStyle = raw;
+        const normalized = String(ctx.fillStyle);
+        if (!normalized || normalized.toLowerCase() === sentinel) return null;
+        const parsed = parseHexOrRgb(normalized);
+        if (!parsed || parsed.a === 0) return null;
+        return parsed;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function parseHexOrRgb(raw) {
+      const hex = raw.match(/^#([0-9a-f]{3,8})$/i);
+      if (hex) {
+        let h = hex[1];
+        if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+        if (h.length === 4) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+h[3]+h[3];
+        return {
+          r: parseInt(h.slice(0, 2), 16) / 255,
+          g: parseInt(h.slice(2, 4), 16) / 255,
+          b: parseInt(h.slice(4, 6), 16) / 255,
+          a: h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1
+        };
+      }
+
+      // Classic: rgb(247, 241, 228) / rgba(..., 0.45)
+      let m = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+      if (m) {
+        return {
+          r: Math.min(255, parseFloat(m[1])) / 255,
+          g: Math.min(255, parseFloat(m[2])) / 255,
+          b: Math.min(255, parseFloat(m[3])) / 255,
+          a: m[4] !== undefined ? parseFloat(m[4]) : 1
+        };
+      }
+
+      // Modern: rgb(247 241 228) / rgb(38 33 27 / 0.45)
+      m = raw.match(/^rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i);
+      if (m) {
+        let a = 1;
+        if (m[4] !== undefined) {
+          a = String(m[4]).indexOf('%') >= 0 ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+        }
+        return {
+          r: Math.min(255, parseFloat(m[1])) / 255,
+          g: Math.min(255, parseFloat(m[2])) / 255,
+          b: Math.min(255, parseFloat(m[3])) / 255,
+          a: a
+        };
+      }
+      return null;
+    }
+
+    function clamp01(n) {
+      if (n < 0) return 0;
+      if (n > 1) return 1;
+      return n;
+    }
+
+    function backgroundNeedsRaster(style) {
+      const img = style.backgroundImage || '';
+      if (!img || img === 'none') return false;
+      const lower = img.toLowerCase();
+      if (lower.indexOf('url(') >= 0) return true;
+      if (lower.indexOf('radial-gradient(') >= 0) return true;
+      if (lower.indexOf('conic-gradient(') >= 0) return true;
+      const layers = splitTopLevel(img, ',');
+      if (layers.length > 1) return true;
+      return lower.indexOf('linear-gradient(') < 0;
+    }
+
+    async function rasterizeElementLook(el, width, height) {
+      const w = Math.max(Math.ceil(width), 1);
+      const h = Math.max(Math.ceil(height), 1);
+      // Cap raster size so large photo blocks don't blow the plugin message limit
+      const maxEdge = 900;
+      const scale = Math.min(1, maxEdge / Math.max(w, h));
+      const rw = Math.max(Math.round(w * scale), 1);
+      const rh = Math.max(Math.round(h * scale), 1);
+      const win = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+      const cs = win.getComputedStyle(el);
+      const clone = el.cloneNode(false);
+      const props = [
+        'background', 'background-color', 'background-image', 'background-size',
+        'background-position', 'background-repeat', 'border-radius'
+      ];
+      let cssText = 'width:' + rw + 'px;height:' + rh + 'px;margin:0;padding:0;box-sizing:border-box;';
+      for (let i = 0; i < props.length; i++) {
+        const val = cs.getPropertyValue(props[i]);
+        if (val) cssText += props[i] + ':' + val + ';';
+      }
+      clone.setAttribute('style', cssText);
+      const wrapper = '<div xmlns="http://www.w3.org/1999/xhtml" style="width:' + rw +
+        'px;height:' + rh + 'px;overflow:hidden;">' + clone.outerHTML + '</div>';
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + rw + '" height="' + rh + '">' +
+        '<foreignObject width="100%" height="100%">' + wrapper + '</foreignObject></svg>';
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      try {
+        // scale=1 — backgrounds are already downsampled via maxEdge
+        return await drawUrlToPngBase64(url, rw, rh, 1);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function splitTopLevel(str, sep) {
+      const out = [];
+      let cur = '';
+      let depth = 0;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === '(') depth++;
+        if (ch === ')') depth--;
+        if (ch === sep && depth === 0) {
+          out.push(cur);
+          cur = '';
+        } else cur += ch;
+      }
+      if (cur) out.push(cur);
+      return out;
+    }
+
+    function cssAngleToDegrees(token) {
+      const t = token.toLowerCase().trim();
+      if (t.indexOf('to ') === 0) {
+        if (t.indexOf('right') >= 0 && t.indexOf('top') >= 0) return 45;
+        if (t.indexOf('left') >= 0 && t.indexOf('top') >= 0) return 315;
+        if (t.indexOf('right') >= 0 && t.indexOf('bottom') >= 0) return 135;
+        if (t.indexOf('left') >= 0 && t.indexOf('bottom') >= 0) return 225;
+        if (t.indexOf('right') >= 0) return 90;
+        if (t.indexOf('left') >= 0) return 270;
+        if (t.indexOf('top') >= 0) return 0;
+        return 180;
+      }
+      const deg = t.match(/([\d.-]+)\s*deg/);
+      if (deg) return parseFloat(deg[1]);
+      return 180;
+    }
+
+    function parseLinearGradient(bgImage) {
+      if (!bgImage || bgImage === 'none') return null;
+      const start = bgImage.toLowerCase().indexOf('linear-gradient(');
+      if (start < 0) return null;
+      let i = start + 'linear-gradient('.length;
+      let depth = 1;
+      let inner = '';
+      for (; i < bgImage.length; i++) {
+        const ch = bgImage[i];
+        if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0) break;
+        }
+        inner += ch;
+      }
+      if (depth !== 0) return null;
+      const parts = splitTopLevel(inner, ',');
+      if (parts.length < 2) return null;
+      let angleDeg = 180;
+      let stopStart = 0;
+      const first = parts[0].trim().toLowerCase();
+      if (first.indexOf('deg') >= 0 || first.indexOf('to ') === 0) {
+        angleDeg = cssAngleToDegrees(parts[0].trim());
+        stopStart = 1;
+      }
+      const stops = [];
+      for (let s = stopStart; s < parts.length; s++) {
+        const piece = parts[s].trim();
+        const colorMatch = piece.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/i);
+        if (!colorMatch) continue;
+        const color = parseCssColor(colorMatch[1]);
+        if (!color) continue;
+        const rest = piece.slice(colorMatch[0].length).trim();
+        const pct = rest.match(/([\d.]+)%/);
+        stops.push({
+          position: pct ? parseFloat(pct[1]) / 100 : (stops.length === 0 ? 0 : 1),
+          color: color
+        });
+      }
+      if (stops.length < 2) return null;
+      stops[0].position = 0;
+      stops[stops.length - 1].position = 1;
+      return { angleDeg: angleDeg, stops: stops };
+    }
+
+    /** Parse first drop/outer box-shadow into a Figma-like effect. */
+    function parseBoxShadow(css) {
+      if (!css || css === 'none') return null;
+      return splitTopLevel(css, ',').map(function (part) {
+        part = part.trim();
+        const inset = /^inset\b/i.test(part);
+        const colorMatch = part.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})/i);
+        if (!colorMatch) return null;
+        const color = parseCssColor(colorMatch[1]);
+        if (!color) return null;
+        const nums = part
+          .replace(/^inset\b/i, '')
+          .replace(colorMatch[0], '')
+          .trim()
+          .split(/\s+/)
+          .map(function (n) { return parseFloat(n); })
+          .filter(function (n) { return !isNaN(n); });
+        if (nums.length < 2) return null;
+        return {
+          type: inset ? 'INNER_SHADOW' : 'DROP_SHADOW',
+          color: color,
+          offset: { x: nums[0], y: nums[1] },
+          radius: nums[2] || 0,
+          spread: nums[3] || 0
+        };
+      }).filter(Boolean);
+    }
+
+    function getBorderWidth(style) {
+      const sides = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
+      for (let i = 0; i < sides.length; i++) {
+        const n = parseFloat(sides[i]);
+        if (n > 0) return n;
+      }
+      return 0;
+    }
+
+    function getBorderRadius(style) {
+      const corners = [
+        style.borderTopLeftRadius, style.borderTopRightRadius,
+        style.borderBottomRightRadius, style.borderBottomLeftRadius
+      ];
+      let max = 0;
+      for (let i = 0; i < corners.length; i++) {
+        const n = parseFloat(corners[i]);
+        if (n > max) max = n;
+      }
+      return max;
+    }
+
+    function buildNodeName(el) {
+      const tag = el.tagName.toLowerCase();
+      const id = el.id ? '#' + el.id : '';
+      let className = '';
+      if (typeof el.className === 'string') {
+        className = el.className.trim().split(/\s+/).filter(Boolean).map(function (c) { return '.' + c; }).join('');
+      }
+      return (tag + id + className) || tag;
+    }
+
+    // -------------------------------------------------------------------------
+    // Asset rasterization (SVG / img → PNG bytes for Figma createImage)
+    // -------------------------------------------------------------------------
+
+    function nextImageId() {
+      return 'img_' + Object.keys(imageStore).length + '_' + Math.random().toString(36).slice(2, 7);
+    }
+
+    function dataUrlToRawBase64(dataUrl) {
+      const i = dataUrl.indexOf('base64,');
+      return i >= 0 ? dataUrl.slice(i + 7) : dataUrl;
+    }
+
+    async function rasterizeSvgElement(svgEl, width, height) {
+      const w = Math.max(Math.ceil(width), 1);
+      const h = Math.max(Math.ceil(height), 1);
+      const clone = svgEl.cloneNode(true);
+      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('width', String(w));
+      clone.setAttribute('height', String(h));
+      const win = (svgEl.ownerDocument && svgEl.ownerDocument.defaultView) || window;
+      const cs = win.getComputedStyle(svgEl);
+      if (cs.stroke && cs.stroke !== 'none' && !clone.getAttribute('stroke')) {
+        clone.setAttribute('stroke', cs.stroke);
+      }
+      if (cs.fill && cs.fill !== 'none' && (!clone.getAttribute('fill') || clone.getAttribute('fill') === '')) {
+        clone.setAttribute('fill', cs.fill);
+      }
+      clone.querySelectorAll('path, circle, line, polyline, polygon, rect, ellipse').forEach(function (shape) {
+        if (!shape.getAttribute('stroke') && cs.stroke && cs.stroke !== 'none') {
+          shape.setAttribute('stroke', cs.stroke);
+        }
+        if (!shape.getAttribute('stroke-width') && cs.strokeWidth) {
+          shape.setAttribute('stroke-width', cs.strokeWidth);
+        }
+      });
+      const xml = new XMLSerializer().serializeToString(clone);
+      const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+      return await drawUrlToPngBase64(svgUrl, w, h);
+    }
+
+    async function rasterizeImgElement(imgEl, width, height) {
+      const w = Math.max(Math.ceil(width), 1);
+      const h = Math.max(Math.ceil(height), 1);
+      try {
+        if (imgEl.complete && imgEl.naturalWidth) {
+          return await drawImageToPngBase64(imgEl, w, h);
+        }
+        const src = imgEl.currentSrc || imgEl.src;
+        if (!src) return null;
+        return await drawUrlToPngBase64(src, w, h);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function drawUrlToPngBase64(url, w, h, scale) {
+      const pixelScale = scale || 2;
+      return new Promise(function (resolve, reject) {
+        const img = new Image();
+        let done = false;
+        const timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          reject(new Error('image load timed out'));
+        }, 2000);
+        img.onload = async function () {
+          if (done) return;
+          try {
+            const b64 = await drawImageToPngBase64(img, w, h, pixelScale);
+            done = true;
+            clearTimeout(timer);
+            resolve(b64);
+          } catch (e) {
+            done = true;
+            clearTimeout(timer);
+            reject(e);
+          }
+        };
+        img.onerror = function () {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          reject(new Error('image load failed'));
+        };
+        img.src = url;
+      });
+    }
+
+    function drawImageToPngBase64(img, w, h, scale) {
+      const pixelScale = scale || 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(Math.round(w * pixelScale), 1);
+      canvas.height = Math.max(Math.round(h * pixelScale), 1);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return dataUrlToRawBase64(canvas.toDataURL('image/png'));
+    }
+
+    // -------------------------------------------------------------------------
+    // DOM serialize
+    // -------------------------------------------------------------------------
+
+    const SKIP_TAGS = {
+      SCRIPT: true, STYLE: true, LINK: true, META: true, NOSCRIPT: true,
+      HEAD: true, TITLE: true, BR: true, HR: true, TEMPLATE: true,
+      PATH: true, CIRCLE: true, LINE: true, POLYLINE: true, POLYGON: true,
+      RECT: true, ELLIPSE: true, G: true, DEFS: true, USE: true, SYMBOL: true
+    };
+
+    const TEXT_TAGS = {
+      P: true, SPAN: true, H1: true, H2: true, H3: true, H4: true, H5: true, H6: true,
+      A: true, LABEL: true, LI: true, TD: true, TH: true, BUTTON: true,
+      STRONG: true, EM: true, B: true, I: true, SMALL: true, CODE: true,
+      PRE: true, BLOCKQUOTE: true, FIGCAPTION: true, DT: true, DD: true
+    };
+
+    const CONTAINER_TAGS = {
+      DIV: true, SECTION: true, ARTICLE: true, NAV: true, HEADER: true,
+      FOOTER: true, MAIN: true, ASIDE: true, UL: true, OL: true, FORM: true,
+      FIGURE: true, BODY: true, HTML: true
+    };
+
+    function textStyleFrom(style) {
+      const fontSize = parseFloat(style.fontSize) || 12;
+      let lineHeight = parseFloat(style.lineHeight);
+      if (isNaN(lineHeight)) lineHeight = fontSize * 1.2;
+      let letterSpacing = parseFloat(style.letterSpacing);
+      if (isNaN(letterSpacing)) letterSpacing = 0;
+      return {
+        fontFamily: style.fontFamily.split(',')[0].replace(/['"]/g, '').trim(),
+        fontSize: fontSize,
+        fontWeight: style.fontWeight || '400',
+        fontStyle: style.fontStyle || 'normal',
+        lineHeight: lineHeight,
+        letterSpacing: letterSpacing,
+        textAlign: style.textAlign || 'left',
+        textTransform: style.textTransform || 'none',
+        textColor: parseCssColor(style.color)
+      };
+    }
+
+    function applyTextTransform(text, transform) {
+      if (!text) return text;
+      if (transform === 'uppercase') return text.toUpperCase();
+      if (transform === 'lowercase') return text.toLowerCase();
+      if (transform === 'capitalize') {
+        return text.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      }
+      return text;
+    }
+
+    function readPseudoContent(el, which, win) {
+      const st = win.getComputedStyle(el, which);
+      if (!st) return null;
+      let content = st.content;
+      if (!content || content === 'none' || content === 'normal') return null;
+      content = content.replace(/^['"]|['"]$/g, '');
+      if (!content || content === 'none' || content === 'open-quote' || content === 'close-quote') return null;
+      return { text: content, style: st };
+    }
+
+    function hasDecorativePseudo(el, win) {
+      const whichs = ['::before', '::after'];
+      for (let i = 0; i < whichs.length; i++) {
+        const st = win.getComputedStyle(el, whichs[i]);
+        if (!st) continue;
+        const content = st.content;
+        if (!content || content === 'none' || content === 'normal') continue;
+        const w = parseFloat(st.width);
+        const h = parseFloat(st.height);
+        const blW = parseFloat(st.borderLeftWidth) || 0;
+        const brW = parseFloat(st.borderRightWidth) || 0;
+        if ((w > 0 && h > 0) || blW > 0 || brW > 0) return true;
+        const bg = st.backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          if (w > 0 || h > 0) return true;
+        }
+      }
+      return false;
+    }
+
+    function makeTextNode(opts) {
+      return {
+        tag: opts.tag || '#text',
+        name: opts.name || 'text',
+        x: opts.x,
+        y: opts.y,
+        width: Math.max(opts.width, 1),
+        height: Math.max(opts.height, 1),
+        opacity: 1,
+        backgroundColor: null,
+        borderWidth: 0,
+        borderColor: null,
+        borderRadius: 0,
+        isText: true,
+        isImage: false,
+        isSvg: false,
+        text: opts.text,
+        fontFamily: opts.fontFamily,
+        fontSize: opts.fontSize,
+        fontWeight: opts.fontWeight,
+        fontStyle: opts.fontStyle,
+        lineHeight: opts.lineHeight,
+        letterSpacing: opts.letterSpacing || 0,
+        textAlign: opts.textAlign || 'left',
+        textColor: opts.textColor,
+        children: []
+      };
+    }
+
+    async function serializeElement(el, hostRect, win) {
+      if (el.nodeType !== 1) return null;
+      if (SKIP_TAGS[el.tagName]) return null;
+
+      const style = win.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return null;
+
+      const rect = el.getBoundingClientRect();
+      const textContent = (el.textContent || '').trim();
+      if (rect.width === 0 && rect.height === 0 && !textContent && el.tagName !== 'SVG') return null;
+      if (rect.height < 1 && style.overflow === 'hidden' && parseFloat(style.maxHeight) === 0) return null;
+
+      const x = rect.left - hostRect.left;
+      const y = rect.top - hostRect.top;
+      const width = Math.max(rect.width, 0);
+      const height = Math.max(rect.height, 0);
+
+      const solid = parseCssColor(style.backgroundColor);
+      const gradient = parseLinearGradient(style.backgroundImage);
+      const shadows = parseBoxShadow(style.boxShadow);
+      const borderWidth = getBorderWidth(style);
+      const borderColor = borderWidth > 0 ? parseCssColor(style.borderTopColor) : null;
+      const borderRadius = getBorderRadius(style);
+      const opacity = parseFloat(style.opacity);
+      const overflow = style.overflow;
+      const zIndex = parseInt(style.zIndex, 10);
+
+      const tag = el.tagName.toLowerCase();
+      const isImg = tag === 'img';
+      const isSvg = tag === 'svg';
+
+      const meaningfulKids = Array.prototype.filter.call(el.children, function (c) {
+        return c.nodeType === 1 && !SKIP_TAGS[c.tagName];
+      });
+      const hasElementChildren = !isSvg && meaningfulKids.length > 0;
+
+      const isText =
+        !isImg && !isSvg &&
+        !CONTAINER_TAGS[el.tagName] &&
+        !hasElementChildren &&
+        textContent.length > 0 &&
+        (TEXT_TAGS[el.tagName] || el.children.length === 0) &&
+        !hasDecorativePseudo(el, win);
+
+      const node = {
+        tag: tag,
+        name: buildNodeName(el),
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        opacity: isNaN(opacity) ? 1 : opacity,
+        backgroundColor: solid,
+        gradient: gradient,
+        boxShadows: shadows,
+        borderWidth: borderWidth,
+        borderColor: borderColor,
+        borderRadius: borderRadius,
+        overflow: overflow,
+        zIndex: isNaN(zIndex) ? 0 : zIndex,
+        isText: isText,
+        isImage: isImg,
+        isSvg: isSvg,
+        imageRef: null,
+        children: []
+      };
+
+      if (isText) {
+        let text = textContent;
+        const before = readPseudoContent(el, '::before', win);
+        const after = readPseudoContent(el, '::after', win);
+        if (before) text = before.text + (before.text.length === 1 ? ' ' : '') + text;
+        if (after) text = text + after.text;
+        const ts = textStyleFrom(style);
+        text = applyTextTransform(text, ts.textTransform);
+        node.text = text;
+        node.fontFamily = ts.fontFamily;
+        node.fontSize = ts.fontSize;
+        node.fontWeight = ts.fontWeight;
+        node.fontStyle = ts.fontStyle;
+        node.lineHeight = ts.lineHeight;
+        node.letterSpacing = ts.letterSpacing;
+        node.textAlign = ts.textAlign;
+        node.textColor = ts.textColor;
+        return node;
+      }
+
+      if (isSvg) {
+        try {
+          const png = await rasterizeSvgElement(el, width || 24, height || 24);
+          if (png) {
+            const id = nextImageId();
+            imageStore[id] = png;
+            node.imageRef = id;
+            node.isImage = true;
+            node.isSvg = false;
+            node.name = 'svg';
+            node.backgroundColor = null;
+            node.gradient = null;
+            return node;
+          }
+        } catch (e) { /* fall through to stroke placeholder */ }
+        let stroke = parseCssColor(style.stroke) || parseCssColor(style.color);
+        node.strokeColor = stroke;
+        node.strokeWidth = parseFloat(style.strokeWidth) || 1.5;
+        node.name = 'svg';
+        return node;
+      }
+
+      if (isImg) {
+        node.imageSrc = el.getAttribute('src') || 'image';
+        node.name = 'img:' + (node.imageSrc.split('/').pop() || 'image');
+        try {
+          const png = await rasterizeImgElement(el, width, height);
+          if (png) {
+            const id = nextImageId();
+            imageStore[id] = png;
+            node.imageRef = id;
+          }
+        } catch (e) { /* placeholder fill */ }
+        if (!node.backgroundColor && !node.gradient && !node.imageRef) {
+          node.backgroundColor = { r: 0.93, g: 0.9, b: 0.82, a: 1 };
+        }
+        return node;
+      }
+
+      // Photo blocks / layered gradients: rasterize look so Figma matches the page
+      if (!isText && width >= 8 && height >= 8 && backgroundNeedsRaster(style)) {
+        try {
+          const png = await rasterizeElementLook(el, width, height);
+          if (png) {
+            const id = nextImageId();
+            imageStore[id] = png;
+            // Keep children (tags/overlays) — paint the look as an image sibling behind them
+            node.children.push({
+              tag: 'div',
+              name: 'bg:' + node.name,
+              x: x,
+              y: y,
+              width: width,
+              height: height,
+              opacity: 1,
+              backgroundColor: null,
+              gradient: null,
+              boxShadows: null,
+              borderWidth: 0,
+              borderColor: null,
+              borderRadius: borderRadius,
+              overflow: 'hidden',
+              zIndex: -1,
+              isText: false,
+              isImage: true,
+              isSvg: false,
+              imageRef: id,
+              children: []
+            });
+            node.backgroundColor = null;
+            node.gradient = null;
+          }
+        } catch (e) { /* keep parsed gradient/solid */ }
+      }
+
+      for (let i = 0; i < el.childNodes.length; i++) {
+        const child = el.childNodes[i];
+        if (child.nodeType === 3) {
+          const raw = child.textContent || '';
+          if (!raw.trim()) continue;
+          const range = el.ownerDocument.createRange();
+          range.selectNodeContents(child);
+          const r = range.getBoundingClientRect();
+          if (r.width === 0 && r.height === 0) continue;
+          const ts = textStyleFrom(style);
+          node.children.push(makeTextNode({
+            name: 'text',
+            x: r.left - hostRect.left,
+            y: r.top - hostRect.top,
+            width: r.width,
+            height: Math.max(r.height, ts.fontSize),
+            text: applyTextTransform(raw.replace(/\s+/g, ' '), ts.textTransform),
+            fontFamily: ts.fontFamily,
+            fontSize: ts.fontSize,
+            fontWeight: ts.fontWeight,
+            fontStyle: ts.fontStyle,
+            lineHeight: ts.lineHeight,
+            letterSpacing: ts.letterSpacing,
+            textAlign: ts.textAlign,
+            textColor: ts.textColor
+          }));
+        } else if (child.nodeType === 1) {
+          const c = await serializeElement(child, hostRect, win);
+          if (c) node.children.push(c);
+        }
+      }
+
+      // Decorative bullets / play icons via ::before / ::after
+      appendPseudoBox(node, el, '::before', hostRect, win);
+      appendPseudoBox(node, el, '::after', hostRect, win);
+
+      // Paint order: higher z-index later (on top in Figma)
+      node.children.sort(function (a, b) {
+        return (a.zIndex || 0) - (b.zIndex || 0);
+      });
+
+      return node;
+    }
+
+    function appendPseudoBox(node, el, which, hostRect, win) {
+      try {
+        const st = win.getComputedStyle(el, which);
+        if (!st) return;
+        const content = st.content;
+        if (!content || content === 'none' || content === 'normal') return;
+        // Skip quote/text pseudos that are already folded into text nodes
+        const texty = content.replace(/^['"]|['"]$/g, '');
+        if (texty && texty !== 'none' && texty !== 'open-quote' && texty !== 'close-quote' && texty.length > 0) {
+          // Pure text pseudo — already handled for isText nodes
+          if (TEXT_TAGS[el.tagName]) return;
+        }
+        const w = parseFloat(st.width);
+        const h = parseFloat(st.height);
+        if (!(w > 0 && h > 0)) return;
+        // Approximate position from parent box + offsets when absolute
+        const parentRect = el.getBoundingClientRect();
+        let px = parentRect.left - hostRect.left;
+        let py = parentRect.top - hostRect.top;
+        if (st.position === 'absolute' || st.position === 'fixed') {
+          const top = parseFloat(st.top);
+          const left = parseFloat(st.left);
+          const right = parseFloat(st.right);
+          const bottom = parseFloat(st.bottom);
+          if (!isNaN(left)) px = parentRect.left - hostRect.left + left;
+          else if (!isNaN(right)) px = parentRect.right - hostRect.left - right - w;
+          if (!isNaN(top)) py = parentRect.top - hostRect.top + top;
+          else if (!isNaN(bottom)) py = parentRect.bottom - hostRect.top - bottom - h;
+          // transform: translate(-50%, -50%) common for play buttons
+          const transform = st.transform;
+          if (transform && transform.indexOf('matrix') >= 0) {
+            const parts = transform.match(/matrix\(([^)]+)\)/);
+            if (parts) {
+              const nums = parts[1].split(',').map(function (n) { return parseFloat(n.trim()); });
+              if (nums.length >= 6) {
+                px += nums[4];
+                py += nums[5];
+              }
+            }
+          }
+        } else {
+          // Inline flex bullets sit at the start of the line box — use a small inset
+          px += 0;
+          py += Math.max((parentRect.height - h) / 2, 0);
+        }
+        const bg = parseCssColor(st.backgroundColor);
+        const borderW = parseFloat(st.borderTopWidth) || 0;
+        // CSS triangle via borders (play icon)
+        const blW = parseFloat(st.borderLeftWidth) || 0;
+        const btW = parseFloat(st.borderTopWidth) || 0;
+        const bbW = parseFloat(st.borderBottomWidth) || 0;
+        const brW = parseFloat(st.borderRightWidth) || 0;
+        const isTriangle = (w === 0 || h === 0 || (parseFloat(st.width) === 0)) && (blW > 0 || brW > 0);
+        let fill = bg;
+        let boxW = w;
+        let boxH = h;
+        if (isTriangle || (parseFloat(st.width) === 0 && blW > 0)) {
+          fill = parseCssColor(st.borderLeftColor) || parseCssColor(st.borderTopColor) || bg;
+          boxW = blW || brW || 8;
+          boxH = (btW + bbW) || 12;
+          // For zero-size border triangles, width/height from getComputedStyle may be 0
+          if (!(w > 0)) {
+            /* keep boxW/boxH from borders */
+          } else {
+            boxW = Math.max(w, boxW);
+            boxH = Math.max(h, boxH);
+          }
+        }
+        if (!fill && borderW <= 0 && !isTriangle) return;
+        if (!(boxW > 0 && boxH > 0)) return;
+        const radius = parseFloat(st.borderTopLeftRadius) || 0;
+        node.children.push({
+          tag: 'pseudo',
+          name: which,
+          x: px,
+          y: py,
+          width: boxW,
+          height: boxH,
+          opacity: 1,
+          backgroundColor: fill,
+          gradient: null,
+          boxShadows: null,
+          borderWidth: (!isTriangle && borderW > 0) ? borderW : 0,
+          borderColor: borderW > 0 ? parseCssColor(st.borderTopColor) : null,
+          borderRadius: radius,
+          overflow: 'visible',
+          zIndex: 1,
+          isText: false,
+          isImage: false,
+          isSvg: false,
+          imageRef: null,
+          children: []
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    function prepareDomForCapture(root) {
+      root.querySelectorAll('.faq-a, details').forEach(function (el) {
+        if (el.tagName === 'DETAILS') { el.open = true; return; }
+        el.style.maxHeight = 'none';
+        el.style.overflow = 'visible';
+      });
+      root.querySelectorAll('.faq-item').forEach(function (el) {
+        el.classList.add('open');
+      });
+    }
+
+    function waitForIframeLoad(iframe) {
+      return new Promise(function (resolve, reject) {
+        const timeout = setTimeout(function () {
+          reject(new Error('The HTML preview did not finish loading.'));
+        }, 10000);
+        iframe.onload = function () {
+          clearTimeout(timeout);
+          resolve();
+        };
+      });
+    }
+
+    async function waitForPageAssets(doc) {
+      const images = Array.prototype.slice.call(doc.images || []);
+      await Promise.all(images.map(function (img) {
+        if (img.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+        });
+      }));
+      if (doc.fonts && doc.fonts.ready) {
+        await Promise.race([
+          doc.fonts.ready,
+          new Promise(function (resolve) { setTimeout(resolve, 5000); })
+        ]);
+      }
+    }
+
+    /** Render the source in a real isolated document so page-level CSS stays intact. */
+    async function captureHtmlTree(html) {
+      Object.keys(imageStore).forEach(function (k) { delete imageStore[k]; });
+      renderHost.innerHTML = '';
+
+      const safe = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+      const source = /<html[\s>]/i.test(safe)
+        ? safe
+        : '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + safe + '</body></html>';
+
+      // Keep the measure iframe in the plugin viewport (opacity:0). Off-screen /
+      // visibility:hidden iframes are throttled inside Figma's plugin UI and
+      // often yield empty or collapsed layout measurements.
+      renderHost.style.width = Math.min(viewportWidth, 360) + 'px';
+      renderHost.style.height = '1px';
+      renderHost.style.overflow = 'hidden';
+
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('sandbox', 'allow-same-origin');
+      iframe.setAttribute('scrolling', 'no');
+      iframe.style.cssText =
+        'display:block;border:0;width:' + viewportWidth + 'px;height:1px;opacity:0;pointer-events:none;';
+      renderHost.appendChild(iframe);
+
+      setStatus('Loading page assets…');
+      try {
+        const loadPromise = waitForIframeLoad(iframe);
+        // Start short so scrollHeight reflects content, not the iframe chrome
+        iframe.style.height = '1px';
+        iframe.srcdoc = source;
+        await loadPromise;
+        const doc = iframe.contentDocument;
+        const win = iframe.contentWindow;
+        if (!doc || !win || !doc.body) throw new Error('Could not access the HTML preview.');
+        await waitForPageAssets(doc);
+        prepareDomForCapture(doc.body);
+
+        // Expand to content height (not a huge empty viewport that stretches body)
+        const contentHeight = Math.max(
+          doc.body.scrollHeight,
+          doc.documentElement.scrollHeight,
+          doc.body.offsetHeight,
+          600
+        );
+        iframe.style.height = Math.min(contentHeight + 40, 20000) + 'px';
+
+        await new Promise(function (r) {
+          win.requestAnimationFrame(function () { win.requestAnimationFrame(r); });
+        });
+        await new Promise(function (r) { setTimeout(r, 80); });
+
+        setStatus('Measuring desktop layout…');
+        const root = doc.documentElement;
+        const rootRect = root.getBoundingClientRect();
+        const bodyRect = doc.body.getBoundingClientRect();
+        const hostRect = {
+          left: Math.min(rootRect.left, bodyRect.left),
+          top: Math.min(rootRect.top, bodyRect.top)
+        };
+
+        // Prefer the bottom of the last in-flow child over a stretched body box
+        let contentBottom = bodyRect.top;
+        const topKids = doc.body.children;
+        for (let i = 0; i < topKids.length; i++) {
+          const r = topKids[i].getBoundingClientRect();
+          if (r.height > 0) contentBottom = Math.max(contentBottom, r.bottom);
+        }
+        const measuredHeight = Math.max(
+          contentBottom - hostRect.top,
+          doc.body.scrollHeight,
+          root.scrollHeight
+        );
+
+        const tree = await serializeElement(doc.body, hostRect, win);
+        if (tree) {
+          tree.name = 'Desktop';
+          tree.x = 0;
+          tree.y = 0;
+          tree.width = Math.max(viewportWidth, root.scrollWidth, doc.body.scrollWidth);
+          tree.height = Math.ceil(measuredHeight);
+          const bodyStyle = win.getComputedStyle(doc.body);
+          tree.backgroundColor = parseCssColor(bodyStyle.backgroundColor) ||
+            parseCssColor(win.getComputedStyle(root).backgroundColor);
+          if (!tree.children || tree.children.length === 0) {
+            throw new Error(
+              'Layout measured an empty page. Try again, or paste a full HTML document with inline CSS.'
+            );
+          }
+        }
+        return tree;
+      } finally {
+        renderHost.innerHTML = '';
+        renderHost.style.width = '1px';
+        renderHost.style.height = '1px';
+      }
+    }
+
+    convertBtn.addEventListener('click', async function () {
+      if (isImporting) return;
+      const html = htmlInput.value.trim();
+      if (!html) {
+        setStatus('Choose an HTML file to import, or paste HTML below.', 'error');
+        fileInput.click();
+        return;
+      }
+
+      setImporting(true, 'Rendering page…');
+      setStatus('Rendering at ' + viewportWidth + 'px…');
+
+      try {
+        const tree = await withTimeout(
+          captureHtmlTree(html),
+          45000,
+          'Render'
+        );
+        if (!tree) {
+          setStatus('Nothing measurable found in the HTML.', 'error');
+          setImporting(false);
+          return;
+        }
+
+        setImporting(true, 'Creating Figma layers…');
+        setStatus('Importing…');
+
+        parent.postMessage({
+          pluginMessage: {
+            type: 'convert',
+            tree: tree,
+            images: Object.assign({}, imageStore),
+            viewportWidth: viewportWidth,
+            asComponent: asComponentInput.checked
+          }
+        }, '*');
+        importTimeout = setTimeout(function () {
+          setImporting(false);
+          setStatus(
+            'Figma did not finish the import. Try a smaller self-contained HTML file, then run the plugin again.',
+            'error'
+          );
+        }, 90000);
+      } catch (err) {
+        renderHost.innerHTML = '';
+        setStatus(err && err.message ? err.message : String(err), 'error');
+        setImporting(false);
+      }
+    });
+
+    onmessage = function (event) {
+      const msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+      setImporting(false);
+      if (msg.type === 'done') {
+        setStatus('Imported · ' + msg.count + ' layers' +
+          (msg.styles ? ' · ' + msg.styles + ' colors' : ''), 'ok');
+      } else if (msg.type === 'error') {
+        setStatus(msg.message, 'error');
+      }
+    };
+  </script>
+</body>
+</html>

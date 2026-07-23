@@ -1,0 +1,16 @@
+{
+  "name": "Open HTML to Figma",
+  "id": "open-htmltofigma",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ],
+    "reasoning": "Pasted HTML often loads Google Fonts (e.g. Playfair Display, Figtree). The plugin must fetch those stylesheets and font files so measured layout and typography match the source page."
+  },
+  "documentAccess": "dynamic-page"
+}
