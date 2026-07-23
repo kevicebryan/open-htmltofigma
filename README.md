@@ -1,5 +1,9 @@
 # Open HTML to Figma
 
+<p align="center">
+  <img src="docs/banner.png" alt="Claude design → Figma — Open HTML to Figma converter" width="100%" />
+</p>
+
 Open-source Figma plugin: turn a **local HTML file** into nested, editable layers that match the rendered page.
 
 No URL crawling. No subscription. The browser lays it out; Figma gets matching Frames and Text.
@@ -8,13 +12,10 @@ If this saves you time, [★ star the repo](https://github.com/kevicebryan/open-
 
 <p align="center">
   <img src="docs/browser-source.png" alt="Source HTML in the browser" width="720" />
-</p>
-<p align="center"><em>Browser</em></p>
-
-<p align="center">
+  &nbsp;
   <img src="docs/figma-result.png" alt="Imported result in Figma" width="720" />
 </p>
-<p align="center"><em>Figma import (1440×6389)</em></p>
+<p align="center"><em>Browser → Figma import</em></p>
 
 ## Quick start
 
