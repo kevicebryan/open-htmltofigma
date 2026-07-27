@@ -376,6 +376,13 @@
   </div>
 
   <div class="field">
+    <label class="option">
+      <input id="run-scripts" type="checkbox" />
+      Execute page scripts (needed for JS-rendered pages)
+    </label>
+  </div>
+
+  <div class="field">
     <span class="field-label">File</span>
     <label class="file-zone" id="file-zone" for="file">
       <input id="file" type="file" accept=".html,.htm,text/html" />
@@ -424,6 +431,7 @@
     const renderHost = document.getElementById('render-host');
     const viewportBtns = document.querySelectorAll('#viewports button');
     const asComponentInput = document.getElementById('as-component');
+    const runScriptsInput = document.getElementById('run-scripts');
 
     let viewportWidth = 1440;
     let isImporting = false;
@@ -845,7 +853,7 @@
           if (done) return;
           done = true;
           reject(new Error('image load timed out'));
-        }, 2000);
+        }, 8000);
         img.onload = async function () {
           if (done) return;
           try {
@@ -1333,12 +1341,43 @@
       }
     }
 
+    /** Wait for a JS-rendered page's own script to finish mutating the DOM
+     *  (e.g. unpacking a templated/bundled export), by waiting for a quiet
+     *  period with no mutations. Caps out so a page that never settles
+     *  (animations, polling) doesn't hang the import. */
+    function waitForDomToSettle(doc) {
+      return new Promise(function (resolve) {
+        const QUIET_MS = 400;
+        const MAX_MS = 8000;
+        let quietTimer = null;
+        const hardTimer = setTimeout(finish, MAX_MS);
+        const observer = new MutationObserver(function () {
+          clearTimeout(quietTimer);
+          quietTimer = setTimeout(finish, QUIET_MS);
+        });
+        function finish() {
+          clearTimeout(hardTimer);
+          clearTimeout(quietTimer);
+          observer.disconnect();
+          resolve();
+        }
+        observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true });
+        quietTimer = setTimeout(finish, QUIET_MS);
+      });
+    }
+
     /** Render the source in a real isolated document so page-level CSS stays intact. */
     async function captureHtmlTree(html) {
       Object.keys(imageStore).forEach(function (k) { delete imageStore[k]; });
       renderHost.innerHTML = '';
 
-      const safe = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+      const runScripts = !!(runScriptsInput && runScriptsInput.checked);
+      // Scripts stay stripped and the iframe stays script-less by default: a
+      // sandbox that both runs scripts and shares origin (needed to read the
+      // rendered DOM back out) can reach into this UI page. Only relax it
+      // when the user opts in for a page that renders its content via JS
+      // (e.g. a bundled/templated export).
+      const safe = runScripts ? html : html.replace(/<script[\s\S]*?<\/script>/gi, '');
       const source = /<html[\s>]/i.test(safe)
         ? safe
         : '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + safe + '</body></html>';
@@ -1351,7 +1390,7 @@
       renderHost.style.overflow = 'hidden';
 
       const iframe = document.createElement('iframe');
-      iframe.setAttribute('sandbox', 'allow-same-origin');
+      iframe.setAttribute('sandbox', runScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
       iframe.setAttribute('scrolling', 'no');
       iframe.style.cssText =
         'display:block;border:0;width:' + viewportWidth + 'px;height:1px;opacity:0;pointer-events:none;';
@@ -1367,6 +1406,10 @@
         const doc = iframe.contentDocument;
         const win = iframe.contentWindow;
         if (!doc || !win || !doc.body) throw new Error('Could not access the HTML preview.');
+        if (runScripts) {
+          setStatus('Running page scripts…');
+          await waitForDomToSettle(doc);
+        }
         await waitForPageAssets(doc);
         prepareDomForCapture(doc.body);
 

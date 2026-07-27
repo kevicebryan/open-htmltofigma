@@ -42,6 +42,8 @@ npm install && npm run build
 
 **Closer match:** full document + inline CSS, install page fonts in Figma, same viewport you’d design at. Try [`examples/`](examples/).
 
+**JS-rendered pages** (content built by an inline `<script>`, not present in the raw HTML): tick **Execute page scripts** before importing. Off by default — only enable it for HTML you trust, since it lets the page’s own script run.
+
 ## How it works
 
 ```

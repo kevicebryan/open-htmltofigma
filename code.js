@@ -411,9 +411,13 @@ async function resolveFont(family, weight, fontStyle) {
     if (cached)
         return cached;
     const style = weightToStyle(weight, fontStyle);
+    // Google Fonts style names are inconsistent about the space in compound
+    // weights ("Semi Bold" vs "SemiBold") depending on the family — try both
+    // before giving up on the weight and falling back to Regular.
+    const noSpace = style.replace(/ /g, '');
     const styleFallbacks = style.indexOf('Italic') >= 0
-        ? [style, 'Italic', style.replace(' Italic', ''), 'Regular']
-        : [style, 'Regular'];
+        ? [style, noSpace, 'Italic', style.replace(' Italic', ''), noSpace.replace('Italic', ''), 'Regular']
+        : [style, noSpace, 'Regular'];
     const seen = new Set();
     for (const fam of familyFallbacks(family || 'Inter')) {
         for (const st of styleFallbacks) {
