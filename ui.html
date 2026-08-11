@@ -361,10 +361,10 @@
   <div class="field">
     <span class="field-label">Viewport</span>
     <div class="segment" id="viewports">
-      <button type="button" data-w="1440" class="active">Desktop</button>
-      <button type="button" data-w="1280">Laptop</button>
-      <button type="button" data-w="768">Tablet</button>
-      <button type="button" data-w="390">Mobile</button>
+      <button type="button" data-w="1440" data-h="900" class="active">Desktop</button>
+      <button type="button" data-w="1280" data-h="800">Laptop</button>
+      <button type="button" data-w="768" data-h="1024">Tablet</button>
+      <button type="button" data-w="390" data-h="844">Mobile</button>
     </div>
   </div>
 
@@ -434,6 +434,7 @@
     const runScriptsInput = document.getElementById('run-scripts');
 
     let viewportWidth = 1440;
+    let viewportHeight = 900;
     let isImporting = false;
     let importTimeout = null;
     const imageStore = {}; // id -> raw base64 PNG (no data: prefix)
@@ -443,6 +444,7 @@
         viewportBtns.forEach(function (b) { b.classList.remove('active'); });
         btn.classList.add('active');
         viewportWidth = parseInt(btn.getAttribute('data-w'), 10);
+        viewportHeight = parseInt(btn.getAttribute('data-h'), 10);
       });
     });
 
@@ -765,17 +767,22 @@
       return 0;
     }
 
-    function getBorderRadius(style) {
-      const corners = [
-        style.borderTopLeftRadius, style.borderTopRightRadius,
-        style.borderBottomRightRadius, style.borderBottomLeftRadius
-      ];
-      let max = 0;
-      for (let i = 0; i < corners.length; i++) {
-        const n = parseFloat(corners[i]);
-        if (n > max) max = n;
-      }
-      return max;
+    function getCornerRadii(style) {
+      return {
+        topLeft: parseFloat(style.borderTopLeftRadius) || 0,
+        topRight: parseFloat(style.borderTopRightRadius) || 0,
+        bottomRight: parseFloat(style.borderBottomRightRadius) || 0,
+        bottomLeft: parseFloat(style.borderBottomLeftRadius) || 0
+      };
+    }
+
+    function maxCornerRadius(radii) {
+      return Math.max(
+        radii.topLeft,
+        radii.topRight,
+        radii.bottomRight,
+        radii.bottomLeft
+      );
     }
 
     function buildNodeName(el) {
@@ -925,9 +932,17 @@
         lineHeight: lineHeight,
         letterSpacing: letterSpacing,
         textAlign: style.textAlign || 'left',
+        direction: style.direction === 'rtl' ? 'rtl' : 'ltr',
         textTransform: style.textTransform || 'none',
         textColor: parseCssColor(style.color)
       };
+    }
+
+    function getTextLineRects(range) {
+      const rects = Array.prototype.slice.call(range.getClientRects());
+      return rects.filter(function (rect) {
+        return rect.width > 0 && rect.height > 0;
+      });
     }
 
     function applyTextTransform(text, transform) {
@@ -983,6 +998,7 @@
         borderWidth: 0,
         borderColor: null,
         borderRadius: 0,
+        cornerRadii: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
         isText: true,
         isImage: false,
         isSvg: false,
@@ -994,6 +1010,8 @@
         lineHeight: opts.lineHeight,
         letterSpacing: opts.letterSpacing || 0,
         textAlign: opts.textAlign || 'left',
+        direction: opts.direction || 'ltr',
+        singleLine: !!opts.singleLine,
         textColor: opts.textColor,
         children: []
       };
@@ -1021,7 +1039,8 @@
       const shadows = parseBoxShadow(style.boxShadow);
       const borderWidth = getBorderWidth(style);
       const borderColor = borderWidth > 0 ? parseCssColor(style.borderTopColor) : null;
-      const borderRadius = getBorderRadius(style);
+      const cornerRadii = getCornerRadii(style);
+      const borderRadius = maxCornerRadius(cornerRadii);
       const opacity = parseFloat(style.opacity);
       const overflow = style.overflow;
       const zIndex = parseInt(style.zIndex, 10);
@@ -1057,6 +1076,7 @@
         borderWidth: borderWidth,
         borderColor: borderColor,
         borderRadius: borderRadius,
+        cornerRadii: cornerRadii,
         overflow: overflow,
         zIndex: isNaN(zIndex) ? 0 : zIndex,
         isText: isText,
@@ -1082,6 +1102,10 @@
         node.lineHeight = ts.lineHeight;
         node.letterSpacing = ts.letterSpacing;
         node.textAlign = ts.textAlign;
+        node.direction = ts.direction;
+        const textRange = el.ownerDocument.createRange();
+        textRange.selectNodeContents(el);
+        node.singleLine = getTextLineRects(textRange).length <= 1;
         node.textColor = ts.textColor;
         return node;
       }
@@ -1147,6 +1171,7 @@
               borderWidth: 0,
               borderColor: null,
               borderRadius: borderRadius,
+              cornerRadii: cornerRadii,
               overflow: 'hidden',
               zIndex: -1,
               isText: false,
@@ -1169,6 +1194,7 @@
           const range = el.ownerDocument.createRange();
           range.selectNodeContents(child);
           const r = range.getBoundingClientRect();
+          const lineRects = getTextLineRects(range);
           if (r.width === 0 && r.height === 0) continue;
           const ts = textStyleFrom(style);
           node.children.push(makeTextNode({
@@ -1185,6 +1211,8 @@
             lineHeight: ts.lineHeight,
             letterSpacing: ts.letterSpacing,
             textAlign: ts.textAlign,
+            direction: ts.direction,
+            singleLine: lineRects.length <= 1,
             textColor: ts.textColor
           }));
         } else if (child.nodeType === 1) {
@@ -1290,6 +1318,7 @@
           borderWidth: (!isTriangle && borderW > 0) ? borderW : 0,
           borderColor: borderW > 0 ? parseCssColor(st.borderTopColor) : null,
           borderRadius: radius,
+          cornerRadii: { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius },
           overflow: 'visible',
           zIndex: 1,
           isText: false,
@@ -1393,14 +1422,13 @@
       iframe.setAttribute('sandbox', runScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
       iframe.setAttribute('scrolling', 'no');
       iframe.style.cssText =
-        'display:block;border:0;width:' + viewportWidth + 'px;height:1px;opacity:0;pointer-events:none;';
+        'display:block;border:0;width:' + viewportWidth + 'px;height:' + viewportHeight +
+        'px;opacity:0;pointer-events:none;';
       renderHost.appendChild(iframe);
 
       setStatus('Loading page assets…');
       try {
         const loadPromise = waitForIframeLoad(iframe);
-        // Start short so scrollHeight reflects content, not the iframe chrome
-        iframe.style.height = '1px';
         iframe.srcdoc = source;
         await loadPromise;
         const doc = iframe.contentDocument;
@@ -1413,21 +1441,12 @@
         await waitForPageAssets(doc);
         prepareDomForCapture(doc.body);
 
-        // Expand to content height (not a huge empty viewport that stretches body)
-        const contentHeight = Math.max(
-          doc.body.scrollHeight,
-          doc.documentElement.scrollHeight,
-          doc.body.offsetHeight,
-          600
-        );
-        iframe.style.height = Math.min(contentHeight + 40, 20000) + 'px';
-
         await new Promise(function (r) {
           win.requestAnimationFrame(function () { win.requestAnimationFrame(r); });
         });
         await new Promise(function (r) { setTimeout(r, 80); });
 
-        setStatus('Measuring desktop layout…');
+        setStatus('Measuring ' + viewportWidth + '×' + viewportHeight + ' layout…');
         const root = doc.documentElement;
         const rootRect = root.getBoundingClientRect();
         const bodyRect = doc.body.getBoundingClientRect();
@@ -1506,6 +1525,7 @@
             tree: tree,
             images: Object.assign({}, imageStore),
             viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
             asComponent: asComponentInput.checked
           }
         }, '*');

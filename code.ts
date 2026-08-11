@@ -31,6 +31,13 @@ interface BoxShadowEffect {
   spread: number;
 }
 
+interface CornerRadii {
+  topLeft: number;
+  topRight: number;
+  bottomRight: number;
+  bottomLeft: number;
+}
+
 interface SerializedHtmlNode {
   tag: string;
   name: string;
@@ -45,6 +52,7 @@ interface SerializedHtmlNode {
   borderWidth: number;
   borderColor: Rgba | null;
   borderRadius: number;
+  cornerRadii?: CornerRadii;
   overflow?: string;
   zIndex?: number;
   isText: boolean;
@@ -59,6 +67,8 @@ interface SerializedHtmlNode {
   lineHeight?: number;
   letterSpacing?: number;
   textAlign?: string;
+  direction?: 'ltr' | 'rtl';
+  singleLine?: boolean;
   textColor?: Rgba | null;
   imageSrc?: string;
   strokeColor?: Rgba | null;
@@ -83,6 +93,7 @@ figma.ui.onmessage = async (msg: {
   tree?: SerializedHtmlNode;
   images?: ImageMap;
   viewportWidth?: number;
+  viewportHeight?: number;
   asComponent?: boolean;
 }) => {
   if (msg.type !== 'convert' || !msg.tree) return;
@@ -113,14 +124,14 @@ figma.ui.onmessage = async (msg: {
 
       const viewport = figma.viewport.center;
       rootFrame.name =
-        'HTML Import' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
+        'HTML Import' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
       rootFrame.x = viewport.x - rootFrame.width / 2;
       rootFrame.y = viewport.y - rootFrame.height / 2;
       figma.currentPage.appendChild(rootFrame);
       if (msg.asComponent) {
         rootFrame = figma.createComponentFromNode(rootFrame);
         rootFrame.name =
-          'HTML Component' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
+          'HTML Component' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
       }
       figma.currentPage.selection = [rootFrame];
       figma.viewport.scrollAndZoomIntoView([rootFrame]);
@@ -174,7 +185,7 @@ async function buildNode(
     }
 
     applyOpacity(rect, data.opacity);
-    applyCornerRadius(rect, data.borderRadius);
+    applyCornerRadii(rect, data);
     applyStroke(rect, data, styles);
     applyShadows(rect, data.boxShadows);
     return rect;
@@ -213,13 +224,12 @@ async function buildNode(
   frame.y = relY;
   frame.fills = buildsFills(data, null, styles);
   applyOpacity(frame, data.opacity);
-  applyCornerRadius(frame, data.borderRadius);
+  applyCornerRadii(frame, data);
   applyStroke(frame, data, styles);
   applyShadows(frame, data.boxShadows);
 
   const overflow = (data.overflow || 'visible').toLowerCase();
   frame.clipsContent =
-    data.borderRadius > 0 ||
     overflow === 'hidden' ||
     overflow === 'auto' ||
     overflow === 'scroll';
@@ -246,7 +256,7 @@ async function buildTextNode(
   text.x = relX;
   text.y = relY;
 
-  const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle);
+  const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
   await figma.loadFontAsync(font);
   text.fontName = font;
   text.characters = data.text || '';
@@ -258,7 +268,8 @@ async function buildTextNode(
   if (data.letterSpacing && Math.abs(data.letterSpacing) > 0.01) {
     text.letterSpacing = { value: data.letterSpacing, unit: 'PIXELS' };
   }
-  text.textAlignHorizontal = mapTextAlign(data.textAlign);
+  const resolvedAlign = mapTextAlign(data.textAlign, data.direction);
+  text.textAlignHorizontal = resolvedAlign;
 
   if (data.textColor) {
     trackColor(styles, data.textColor);
@@ -274,8 +285,15 @@ async function buildTextNode(
   try {
     // Preserve the browser's measured text box. Figma's font metrics can
     // otherwise reflow the text even when its width is the same.
-    text.textAutoResize = 'NONE';
-    text.resize(Math.max(w, 1), Math.max(h, data.fontSize || 12));
+    if (data.singleLine) {
+      text.textAutoResize = 'WIDTH_AND_HEIGHT';
+      const measuredWidth = text.width;
+      if (resolvedAlign === 'RIGHT') text.x = relX + w - measuredWidth;
+      else if (resolvedAlign === 'CENTER') text.x = relX + (w - measuredWidth) / 2;
+    } else {
+      text.textAutoResize = 'NONE';
+      text.resize(Math.max(w, 1), Math.max(h, data.fontSize || 12));
+    }
   } catch {
     try {
       text.textAutoResize = 'HEIGHT';
@@ -420,13 +438,21 @@ function applyOpacity(node: BlendMixin, opacity: number): void {
   if (opacity < 1 && opacity >= 0) node.opacity = opacity;
 }
 
-function applyCornerRadius(
+function applyCornerRadii(
   node: RectangleNode | FrameNode | EllipseNode | ComponentNode | InstanceNode,
-  radius: number
+  data: SerializedHtmlNode
 ): void {
-  if (radius > 0 && 'cornerRadius' in node) {
-    (node as RectangleNode | FrameNode).cornerRadius = radius;
+  if (!('cornerRadius' in node)) return;
+  const target = node as RectangleNode | FrameNode;
+  const radii = data.cornerRadii;
+  if (!radii) {
+    if (data.borderRadius > 0) target.cornerRadius = data.borderRadius;
+    return;
   }
+  target.topLeftRadius = radii.topLeft;
+  target.topRightRadius = radii.topRight;
+  target.bottomRightRadius = radii.bottomRight;
+  target.bottomLeftRadius = radii.bottomLeft;
 }
 
 function applyStroke(
@@ -452,13 +478,19 @@ function applyStroke(
   }
 }
 
-function mapTextAlign(align: string | undefined): 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED' {
+function mapTextAlign(
+  align: string | undefined,
+  direction: 'ltr' | 'rtl' = 'ltr'
+): 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED' {
   switch ((align || 'left').toLowerCase()) {
     case 'center':
       return 'CENTER';
     case 'right':
-    case 'end':
       return 'RIGHT';
+    case 'start':
+      return direction === 'rtl' ? 'RIGHT' : 'LEFT';
+    case 'end':
+      return direction === 'rtl' ? 'LEFT' : 'RIGHT';
     case 'justify':
       return 'JUSTIFIED';
     default:
@@ -474,23 +506,29 @@ function weightToStyle(weight: string | undefined, fontStyle: string | undefined
   const italic = (fontStyle || '').toLowerCase() === 'italic';
   const w = parseInt(weight || '400', 10);
   let base = 'Regular';
-  if (w >= 800) base = 'Black';
+  if (w >= 900) base = 'Black';
+  else if (w >= 800) base = 'Extra Bold';
   else if (w >= 700) base = 'Bold';
   else if (w >= 600) base = 'Semi Bold';
   else if (w >= 500) base = 'Medium';
-  else if (w <= 300) base = 'Light';
+  else if (w >= 400) base = 'Regular';
+  else if (w >= 300) base = 'Light';
+  else if (w >= 200) base = 'Extra Light';
+  else base = 'Thin';
   if (!italic) return base;
   if (base === 'Regular') return 'Italic';
   return base + ' Italic';
 }
 
-function familyFallbacks(family: string): string[] {
+function familyFallbacks(family: string, text?: string): string[] {
   const f = family.trim();
   const lower = f.toLowerCase();
   const serifLike =
     /playfair|serif|georgia|times|garamond|merriweather/.test(lower);
   const list: string[] = [f];
-  if (serifLike) {
+  if (/\p{Script=Arabic}/u.test(text || '')) {
+    list.push('Noto Sans Arabic', 'Noto Kufi Arabic', 'Arial');
+  } else if (serifLike) {
     list.push('Playfair Display', 'Noto Serif', 'Georgia', 'Times New Roman', 'IBM Plex Serif');
   } else {
     list.push('Figtree', 'Inter', 'Roboto', 'Helvetica');
@@ -516,7 +554,8 @@ async function tryLoadFont(font: FontName): Promise<boolean> {
 async function resolveFont(
   family: string | undefined,
   weight: string | undefined,
-  fontStyle?: string
+  fontStyle?: string,
+  text?: string
 ): Promise<FontName> {
   const cacheKey = (family || 'Inter') + '|' + (weight || '400') + '|' + (fontStyle || 'normal');
   const cached = fontFaceCache.get(cacheKey);
@@ -532,7 +571,7 @@ async function resolveFont(
       ? [style, noSpace, 'Italic', style.replace(' Italic', ''), noSpace.replace('Italic', ''), 'Regular']
       : [style, noSpace, 'Regular'];
   const seen = new Set<string>();
-  for (const fam of familyFallbacks(family || 'Inter')) {
+  for (const fam of familyFallbacks(family || 'Inter', text)) {
     for (const st of styleFallbacks) {
       const key = fam + '::' + st;
       if (seen.has(key)) continue;
@@ -556,4 +595,9 @@ function countNodes(node: BaseNode): number {
     for (const child of (node as ChildrenMixin).children) n += countNodes(child);
   }
   return n;
+}
+
+function viewportLabel(width?: number, height?: number): string {
+  if (!width) return '';
+  return ` · ${width}${height ? `×${height}` : ''}px`;
 }

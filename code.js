@@ -40,14 +40,14 @@ figma.ui.onmessage = async (msg) => {
             stylesCreated = await createLocalColorStyles(styleCollector);
             const viewport = figma.viewport.center;
             rootFrame.name =
-                'HTML Import' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
+                'HTML Import' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
             rootFrame.x = viewport.x - rootFrame.width / 2;
             rootFrame.y = viewport.y - rootFrame.height / 2;
             figma.currentPage.appendChild(rootFrame);
             if (msg.asComponent) {
                 rootFrame = figma.createComponentFromNode(rootFrame);
                 rootFrame.name =
-                    'HTML Component' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
+                    'HTML Component' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
             }
             figma.currentPage.selection = [rootFrame];
             figma.viewport.scrollAndZoomIntoView([rootFrame]);
@@ -94,7 +94,7 @@ async function buildNode(data, parentOrigin, styles) {
             rect.fills = buildsFills(data, { r: 0.93, g: 0.9, b: 0.82, a: 1 }, styles);
         }
         applyOpacity(rect, data.opacity);
-        applyCornerRadius(rect, data.borderRadius);
+        applyCornerRadii(rect, data);
         applyStroke(rect, data, styles);
         applyShadows(rect, data.boxShadows);
         return rect;
@@ -130,13 +130,12 @@ async function buildNode(data, parentOrigin, styles) {
     frame.y = relY;
     frame.fills = buildsFills(data, null, styles);
     applyOpacity(frame, data.opacity);
-    applyCornerRadius(frame, data.borderRadius);
+    applyCornerRadii(frame, data);
     applyStroke(frame, data, styles);
     applyShadows(frame, data.boxShadows);
     const overflow = (data.overflow || 'visible').toLowerCase();
     frame.clipsContent =
-        data.borderRadius > 0 ||
-            overflow === 'hidden' ||
+        overflow === 'hidden' ||
             overflow === 'auto' ||
             overflow === 'scroll';
     const origin = { x: data.x, y: data.y };
@@ -152,7 +151,7 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     text.name = data.name;
     text.x = relX;
     text.y = relY;
-    const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle);
+    const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
     await figma.loadFontAsync(font);
     text.fontName = font;
     text.characters = data.text || '';
@@ -163,7 +162,8 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     if (data.letterSpacing && Math.abs(data.letterSpacing) > 0.01) {
         text.letterSpacing = { value: data.letterSpacing, unit: 'PIXELS' };
     }
-    text.textAlignHorizontal = mapTextAlign(data.textAlign);
+    const resolvedAlign = mapTextAlign(data.textAlign, data.direction);
+    text.textAlignHorizontal = resolvedAlign;
     if (data.textColor) {
         trackColor(styles, data.textColor);
         text.fills = [
@@ -177,8 +177,18 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     try {
         // Preserve the browser's measured text box. Figma's font metrics can
         // otherwise reflow the text even when its width is the same.
-        text.textAutoResize = 'NONE';
-        text.resize(Math.max(w, 1), Math.max(h, data.fontSize || 12));
+        if (data.singleLine) {
+            text.textAutoResize = 'WIDTH_AND_HEIGHT';
+            const measuredWidth = text.width;
+            if (resolvedAlign === 'RIGHT')
+                text.x = relX + w - measuredWidth;
+            else if (resolvedAlign === 'CENTER')
+                text.x = relX + (w - measuredWidth) / 2;
+        }
+        else {
+            text.textAutoResize = 'NONE';
+            text.resize(Math.max(w, 1), Math.max(h, data.fontSize || 12));
+        }
     }
     catch (_a) {
         try {
@@ -317,10 +327,20 @@ function applyOpacity(node, opacity) {
     if (opacity < 1 && opacity >= 0)
         node.opacity = opacity;
 }
-function applyCornerRadius(node, radius) {
-    if (radius > 0 && 'cornerRadius' in node) {
-        node.cornerRadius = radius;
+function applyCornerRadii(node, data) {
+    if (!('cornerRadius' in node))
+        return;
+    const target = node;
+    const radii = data.cornerRadii;
+    if (!radii) {
+        if (data.borderRadius > 0)
+            target.cornerRadius = data.borderRadius;
+        return;
     }
+    target.topLeftRadius = radii.topLeft;
+    target.topRightRadius = radii.topRight;
+    target.bottomRightRadius = radii.bottomRight;
+    target.bottomLeftRadius = radii.bottomLeft;
 }
 function applyStroke(node, data, styles) {
     if (data.borderWidth > 0 && data.borderColor) {
@@ -340,13 +360,16 @@ function applyStroke(node, data, styles) {
         node.strokeAlign = 'INSIDE';
     }
 }
-function mapTextAlign(align) {
+function mapTextAlign(align, direction = 'ltr') {
     switch ((align || 'left').toLowerCase()) {
         case 'center':
             return 'CENTER';
         case 'right':
-        case 'end':
             return 'RIGHT';
+        case 'start':
+            return direction === 'rtl' ? 'RIGHT' : 'LEFT';
+        case 'end':
+            return direction === 'rtl' ? 'LEFT' : 'RIGHT';
         case 'justify':
             return 'JUSTIFIED';
         default:
@@ -360,28 +383,39 @@ function weightToStyle(weight, fontStyle) {
     const italic = (fontStyle || '').toLowerCase() === 'italic';
     const w = parseInt(weight || '400', 10);
     let base = 'Regular';
-    if (w >= 800)
+    if (w >= 900)
         base = 'Black';
+    else if (w >= 800)
+        base = 'Extra Bold';
     else if (w >= 700)
         base = 'Bold';
     else if (w >= 600)
         base = 'Semi Bold';
     else if (w >= 500)
         base = 'Medium';
-    else if (w <= 300)
+    else if (w >= 400)
+        base = 'Regular';
+    else if (w >= 300)
         base = 'Light';
+    else if (w >= 200)
+        base = 'Extra Light';
+    else
+        base = 'Thin';
     if (!italic)
         return base;
     if (base === 'Regular')
         return 'Italic';
     return base + ' Italic';
 }
-function familyFallbacks(family) {
+function familyFallbacks(family, text) {
     const f = family.trim();
     const lower = f.toLowerCase();
     const serifLike = /playfair|serif|georgia|times|garamond|merriweather/.test(lower);
     const list = [f];
-    if (serifLike) {
+    if (/\p{Script=Arabic}/u.test(text || '')) {
+        list.push('Noto Sans Arabic', 'Noto Kufi Arabic', 'Arial');
+    }
+    else if (serifLike) {
         list.push('Playfair Display', 'Noto Serif', 'Georgia', 'Times New Roman', 'IBM Plex Serif');
     }
     else {
@@ -405,7 +439,7 @@ async function tryLoadFont(font) {
         return false;
     }
 }
-async function resolveFont(family, weight, fontStyle) {
+async function resolveFont(family, weight, fontStyle, text) {
     const cacheKey = (family || 'Inter') + '|' + (weight || '400') + '|' + (fontStyle || 'normal');
     const cached = fontFaceCache.get(cacheKey);
     if (cached)
@@ -419,7 +453,7 @@ async function resolveFont(family, weight, fontStyle) {
         ? [style, noSpace, 'Italic', style.replace(' Italic', ''), noSpace.replace('Italic', ''), 'Regular']
         : [style, noSpace, 'Regular'];
     const seen = new Set();
-    for (const fam of familyFallbacks(family || 'Inter')) {
+    for (const fam of familyFallbacks(family || 'Inter', text)) {
         for (const st of styleFallbacks) {
             const key = fam + '::' + st;
             if (seen.has(key))
@@ -444,4 +478,9 @@ function countNodes(node) {
             n += countNodes(child);
     }
     return n;
+}
+function viewportLabel(width, height) {
+    if (!width)
+        return '';
+    return ` · ${width}${height ? `×${height}` : ''}px`;
 }
