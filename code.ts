@@ -96,9 +96,16 @@ interface CaptureStats {
 figma.showUI(__html__, { width: 360, height: 520, themeColors: true });
 
 const imageHashCache: Record<string, string> = {};
-const fontFaceCache = new Map<string, FontName>();
+interface ResolvedFontFace {
+  fontName: FontName;
+  weight: number;
+  italic: boolean;
+}
+
+const fontFaceCache = new Map<string, ResolvedFontFace>();
 const fontAvailability = new Map<string, boolean>();
 const fontSubstitutions = new Set<string>();
+let availableFontInventoryPromise: Promise<Map<string, FontName[]>> | null = null;
 let vectorSvgsCreated = 0;
 let vectorSvgFailures = 0;
 
@@ -297,10 +304,24 @@ async function buildTextNode(
   text.x = relX;
   text.y = relY;
 
-  const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
+  const resolvedFont = await resolveFont(
+    data.fontFamily,
+    data.fontWeight,
+    data.fontStyle,
+    data.text
+  );
+  const font = resolvedFont.fontName;
   const requestedFamily = (data.fontFamily || '').trim();
-  if (requestedFamily && requestedFamily.toLowerCase() !== font.family.toLowerCase()) {
-    fontSubstitutions.add(`${requestedFamily} → ${font.family}`);
+  const requestedWeight = normalizeFontWeight(data.fontWeight);
+  const requestedItalic = isItalicStyle(data.fontStyle);
+  if (
+    (requestedFamily && requestedFamily.toLowerCase() !== font.family.toLowerCase()) ||
+    requestedWeight !== resolvedFont.weight ||
+    requestedItalic !== resolvedFont.italic
+  ) {
+    const requestedFace = `${requestedFamily || 'Inter'} ${requestedWeight}${requestedItalic ? ' italic' : ''}`;
+    const actualFace = `${font.family} ${font.style} (${resolvedFont.weight}${resolvedFont.italic ? ' italic' : ''})`;
+    fontSubstitutions.add(`${requestedFace} → ${actualFace}`);
   }
   await figma.loadFontAsync(font);
   text.fontName = font;
@@ -609,8 +630,8 @@ function mapTextAlign(
 // ---------------------------------------------------------------------------
 
 function weightToStyle(weight: string | undefined, fontStyle: string | undefined): string {
-  const italic = (fontStyle || '').toLowerCase() === 'italic';
-  const w = parseInt(weight || '400', 10);
+  const italic = isItalicStyle(fontStyle);
+  const w = normalizeFontWeight(weight);
   let base = 'Regular';
   if (w >= 900) base = 'Black';
   else if (w >= 800) base = 'Extra Bold';
@@ -624,6 +645,82 @@ function weightToStyle(weight: string | undefined, fontStyle: string | undefined
   if (!italic) return base;
   if (base === 'Regular') return 'Italic';
   return base + ' Italic';
+}
+
+function normalizeFontWeight(weight: string | undefined): number {
+  const normalized = (weight || '400').toLowerCase().trim();
+  if (normalized === 'normal') return 400;
+  if (normalized === 'bold') return 700;
+  const parsed = parseInt(normalized, 10);
+  if (isNaN(parsed)) return 400;
+  return Math.max(1, Math.min(parsed, 1000));
+}
+
+function isItalicStyle(style: string | undefined): boolean {
+  return /italic|oblique/.test((style || '').toLowerCase());
+}
+
+function fontWeightFromStyle(style: string): number {
+  const normalized = style.toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/\b(thin|hairline)\b/.test(normalized)) return 100;
+  if (/\b(extra|ultra)\s*light\b/.test(normalized)) return 200;
+  if (/\blight\b/.test(normalized)) return 300;
+  if (/\bmedium\b/.test(normalized)) return 500;
+  if (/\b(semi|demi)\s*bold\b/.test(normalized)) return 600;
+  if (/\b(extra|ultra)\s*bold\b/.test(normalized)) return 800;
+  if (/\b(black|heavy)\b/.test(normalized)) return 900;
+  if (/\bbold\b/.test(normalized)) return 700;
+  return 400;
+}
+
+function cssWeightSortKey(requested: number, candidate: number): [number, number] {
+  if (requested >= 400 && requested <= 500) {
+    if (candidate >= requested && candidate <= 500) return [0, candidate - requested];
+    if (candidate < requested) return [1, requested - candidate];
+    return [2, candidate - 500];
+  }
+  if (requested < 400) {
+    if (candidate <= requested) return [0, requested - candidate];
+    return [1, candidate - requested];
+  }
+  if (candidate >= requested) return [0, candidate - requested];
+  return [1, requested - candidate];
+}
+
+function compareFontFaces(
+  requestedWeight: number,
+  requestedItalic: boolean,
+  a: FontName,
+  b: FontName
+): number {
+  const aItalicMismatch = isItalicStyle(a.style) === requestedItalic ? 0 : 1;
+  const bItalicMismatch = isItalicStyle(b.style) === requestedItalic ? 0 : 1;
+  if (aItalicMismatch !== bItalicMismatch) return aItalicMismatch - bItalicMismatch;
+  const aKey = cssWeightSortKey(requestedWeight, fontWeightFromStyle(a.style));
+  const bKey = cssWeightSortKey(requestedWeight, fontWeightFromStyle(b.style));
+  if (aKey[0] !== bKey[0]) return aKey[0] - bKey[0];
+  if (aKey[1] !== bKey[1]) return aKey[1] - bKey[1];
+  return a.style.localeCompare(b.style);
+}
+
+async function getAvailableFontInventory(): Promise<Map<string, FontName[]>> {
+  if (!availableFontInventoryPromise) {
+    availableFontInventoryPromise = figma
+      .listAvailableFontsAsync()
+      .then((fonts) => {
+        const inventory = new Map<string, FontName[]>();
+        for (const entry of fonts) {
+          const font = entry.fontName;
+          const key = font.family.toLowerCase();
+          const familyFonts = inventory.get(key) || [];
+          if (!familyFonts.some((item) => item.style === font.style)) familyFonts.push(font);
+          inventory.set(key, familyFonts);
+        }
+        return inventory;
+      })
+      .catch(() => new Map<string, FontName[]>());
+  }
+  return availableFontInventoryPromise;
 }
 
 function familyFallbacks(family: string, text?: string): string[] {
@@ -662,11 +759,35 @@ async function resolveFont(
   weight: string | undefined,
   fontStyle?: string,
   text?: string
-): Promise<FontName> {
-  const cacheKey = (family || 'Inter') + '|' + (weight || '400') + '|' + (fontStyle || 'normal');
+): Promise<ResolvedFontFace> {
+  const scriptKey = /\p{Script=Arabic}/u.test(text || '') ? 'arabic' : 'other';
+  const cacheKey =
+    (family || 'Inter') + '|' + (weight || '400') + '|' + (fontStyle || 'normal') + '|' + scriptKey;
   const cached = fontFaceCache.get(cacheKey);
   if (cached) return cached;
 
+  const requestedWeight = normalizeFontWeight(weight);
+  const requestedItalic = isItalicStyle(fontStyle);
+  const inventory = await getAvailableFontInventory();
+  for (const fam of familyFallbacks(family || 'Inter', text)) {
+    const candidates = (inventory.get(fam.toLowerCase()) || [])
+      .slice()
+      .sort((a, b) => compareFontFaces(requestedWeight, requestedItalic, a, b));
+    for (const font of candidates) {
+      if (await tryLoadFont(font)) {
+        const resolved = {
+          fontName: font,
+          weight: fontWeightFromStyle(font.style),
+          italic: isItalicStyle(font.style),
+        };
+        fontFaceCache.set(cacheKey, resolved);
+        return resolved;
+      }
+    }
+  }
+
+  // Retain direct style-name probes for environments whose font inventory is
+  // incomplete, such as older Figma hosts or temporarily unavailable fonts.
   const style = weightToStyle(weight, fontStyle);
   // Google Fonts style names are inconsistent about the space in compound
   // weights ("Semi Bold" vs "SemiBold") depending on the family — try both
@@ -684,15 +805,21 @@ async function resolveFont(
       seen.add(key);
       const font: FontName = { family: fam, style: st };
       if (await tryLoadFont(font)) {
-        fontFaceCache.set(cacheKey, font);
-        return font;
+        const resolved = {
+          fontName: font,
+          weight: fontWeightFromStyle(font.style),
+          italic: isItalicStyle(font.style),
+        };
+        fontFaceCache.set(cacheKey, resolved);
+        return resolved;
       }
     }
   }
   const fallback: FontName = { family: 'Inter', style: 'Regular' };
   await figma.loadFontAsync(fallback);
-  fontFaceCache.set(cacheKey, fallback);
-  return fallback;
+  const resolved = { fontName: fallback, weight: 400, italic: false };
+  fontFaceCache.set(cacheKey, resolved);
+  return resolved;
 }
 
 function countNodes(node: BaseNode): number {
