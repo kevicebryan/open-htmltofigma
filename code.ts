@@ -195,16 +195,36 @@ async function buildNode(
 
   if (data.isSvg && data.svgMarkup) {
     try {
-      const svg = figma.createNodeFromSvg(data.svgMarkup);
-      svg.name = data.name || 'svg';
-      svg.resize(w, h);
-      svg.x = relX;
-      svg.y = relY;
-      applyOpacity(svg, effectiveOpacity(data));
-      applyBrightness(svg, data.filterBrightness);
-      applyEffects(svg, data);
+      const svgArtwork = figma.createNodeFromSvg(data.svgMarkup);
+      svgArtwork.name = 'SVG artwork';
+      svgArtwork.resize(w, h);
+      svgArtwork.x = 0;
+      svgArtwork.y = 0;
+
+      // Figma's generated SVG frame can clip vector geometry to its inferred
+      // path bounds, which is narrower than the browser's viewport for some
+      // large or negatively translated ornaments. A separate wrapper owns the
+      // CSS overflow boundary while the generated artwork remains unclipped.
+      svgArtwork.clipsContent = false;
+      const wrapper = figma.createFrame();
+      wrapper.name = data.name || 'svg';
+      wrapper.resize(w, h);
+      wrapper.x = relX;
+      wrapper.y = relY;
+      wrapper.fills = [];
+      const overflow = (data.overflow || 'hidden').toLowerCase();
+      wrapper.clipsContent =
+        overflow === 'hidden' || overflow === 'auto' || overflow === 'scroll';
+      wrapper.appendChild(svgArtwork);
+
+      // Apply each CSS filter at exactly one level: color filters affect the
+      // imported paints, while compositing opacity/effects belong to the
+      // viewport wrapper.
+      applyBrightness(svgArtwork, data.filterBrightness);
+      applyOpacity(wrapper, effectiveOpacity(data));
+      applyEffects(wrapper, data);
       vectorSvgsCreated++;
-      return svg;
+      return wrapper;
     } catch (error) {
       vectorSvgFailures++;
       console.warn('Failed to create vector SVG', data.name, error);
