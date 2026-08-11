@@ -870,6 +870,22 @@
       );
     }
 
+    function needsTextLayoutContainer(style, visual) {
+      const display = (style.display || '').toLowerCase();
+      if (display === 'flex' || display === 'inline-flex' ||
+          display === 'grid' || display === 'inline-grid') {
+        return true;
+      }
+      const padding = [
+        style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft
+      ];
+      const hasPadding = padding.some(function (value) {
+        return (parseFloat(value) || 0) > 0.01;
+      });
+      return hasPadding || !!visual.solid || !!visual.gradient ||
+        visual.borderWidth > 0 || !!(visual.shadows && visual.shadows.length);
+    }
+
     function buildNodeName(el) {
       const tag = el.tagName.toLowerCase();
       const id = el.id ? '#' + el.id : '';
@@ -1254,6 +1270,12 @@
       const tag = el.tagName.toLowerCase();
       const isImg = tag === 'img';
       const isSvg = tag === 'svg';
+      const preserveTextContainer = needsTextLayoutContainer(style, {
+        solid: solid,
+        gradient: gradient,
+        borderWidth: borderWidth,
+        shadows: shadows
+      });
 
       const meaningfulKids = Array.prototype.filter.call(el.children, function (c) {
         return c.nodeType === 1 && !SKIP_TAGS[c.tagName];
@@ -1264,6 +1286,7 @@
         !isImg && !isSvg &&
         !CONTAINER_TAGS[el.tagName] &&
         !hasElementChildren &&
+        !preserveTextContainer &&
         textContent.length > 0 &&
         (TEXT_TAGS[el.tagName] || el.children.length === 0) &&
         !hasDecorativePseudo(el, win);
