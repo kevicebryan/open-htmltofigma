@@ -83,6 +83,12 @@ interface SerializedHtmlNode {
 
 type ImageMap = Record<string, string>; // id -> raw base64 PNG
 
+interface CaptureStats {
+  vectorSvgs: number;
+  rasterImages: number;
+  rasterBackgrounds: number;
+}
+
 // ---------------------------------------------------------------------------
 // Plugin bootstrap
 // ---------------------------------------------------------------------------
@@ -92,6 +98,9 @@ figma.showUI(__html__, { width: 360, height: 520, themeColors: true });
 const imageHashCache: Record<string, string> = {};
 const fontFaceCache = new Map<string, FontName>();
 const fontAvailability = new Map<string, boolean>();
+const fontSubstitutions = new Set<string>();
+let vectorSvgsCreated = 0;
+let vectorSvgFailures = 0;
 
 figma.ui.onmessage = async (msg: {
   type: string;
@@ -99,6 +108,7 @@ figma.ui.onmessage = async (msg: {
   images?: ImageMap;
   viewportWidth?: number;
   viewportHeight?: number;
+  captureStats?: CaptureStats;
   asComponent?: boolean;
 }) => {
   if (msg.type !== 'convert' || !msg.tree) return;
@@ -106,6 +116,9 @@ figma.ui.onmessage = async (msg: {
   try {
     // Fresh image hashes per import; fonts can stay cached across runs.
     for (const key of Object.keys(imageHashCache)) delete imageHashCache[key];
+    fontSubstitutions.clear();
+    vectorSvgsCreated = 0;
+    vectorSvgFailures = 0;
 
     // Decode raster assets once up front.
     if (msg.images) {
@@ -145,6 +158,10 @@ figma.ui.onmessage = async (msg: {
         type: 'done',
         count: countNodes(rootFrame),
         styles: stylesCreated,
+        vectorSvgs: vectorSvgsCreated,
+        rasterFallbacks: msg.captureStats?.rasterBackgrounds || 0,
+        approximations: vectorSvgFailures,
+        fontSubstitutions: Array.from(fontSubstitutions),
       });
     } else {
       figma.ui.postMessage({ type: 'error', message: 'Nothing was created from the HTML tree.' });
@@ -179,8 +196,10 @@ async function buildNode(
       applyOpacity(svg, effectiveOpacity(data));
       applyBrightness(svg, data.filterBrightness);
       applyEffects(svg, data);
+      vectorSvgsCreated++;
       return svg;
     } catch (error) {
+      vectorSvgFailures++;
       console.warn('Failed to create vector SVG', data.name, error);
     }
   }
@@ -279,6 +298,10 @@ async function buildTextNode(
   text.y = relY;
 
   const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
+  const requestedFamily = (data.fontFamily || '').trim();
+  if (requestedFamily && requestedFamily.toLowerCase() !== font.family.toLowerCase()) {
+    fontSubstitutions.add(`${requestedFamily} → ${font.family}`);
+  }
   await figma.loadFontAsync(font);
   text.fontName = font;
   text.characters = data.text || '';

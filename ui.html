@@ -438,6 +438,11 @@
     let isImporting = false;
     let importTimeout = null;
     const imageStore = {}; // id -> raw base64 PNG (no data: prefix)
+    let captureStats = createCaptureStats();
+
+    function createCaptureStats() {
+      return { vectorSvgs: 0, rasterImages: 0, rasterBackgrounds: 0 };
+    }
 
     viewportBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -713,21 +718,56 @@
       const stops = [];
       for (let s = stopStart; s < parts.length; s++) {
         const piece = parts[s].trim();
-        const colorMatch = piece.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/i);
-        if (!colorMatch) continue;
-        const color = parseCssColor(colorMatch[1]);
+        const colorToken = readLeadingCssColor(piece);
+        if (!colorToken) continue;
+        const color = parseCssColor(colorToken);
         if (!color) continue;
-        const rest = piece.slice(colorMatch[0].length).trim();
+        const rest = piece.slice(colorToken.length).trim();
         const pct = rest.match(/([\d.]+)%/);
         stops.push({
-          position: pct ? parseFloat(pct[1]) / 100 : (stops.length === 0 ? 0 : 1),
+          position: pct ? parseFloat(pct[1]) / 100 : null,
           color: color
         });
       }
       if (stops.length < 2) return null;
-      stops[0].position = 0;
-      stops[stops.length - 1].position = 1;
+      distributeGradientStops(stops);
       return { angleDeg: angleDeg, stops: stops };
+    }
+
+    function readLeadingCssColor(value) {
+      const hex = value.match(/^#[0-9a-fA-F]{3,8}/);
+      if (hex) return hex[0];
+      const fn = value.match(/^(rgba?|hsla?|color|lab|lch|oklab|oklch)\(/i);
+      if (!fn) return null;
+      let depth = 0;
+      for (let i = 0; i < value.length; i++) {
+        if (value[i] === '(') depth++;
+        else if (value[i] === ')') {
+          depth--;
+          if (depth === 0) return value.slice(0, i + 1);
+        }
+      }
+      return null;
+    }
+
+    function distributeGradientStops(stops) {
+      if (stops[0].position === null) stops[0].position = 0;
+      if (stops[stops.length - 1].position === null) stops[stops.length - 1].position = 1;
+      let previous = 0;
+      while (previous < stops.length - 1) {
+        let next = previous + 1;
+        while (next < stops.length && stops[next].position === null) next++;
+        const start = stops[previous].position;
+        const end = stops[next].position;
+        const span = next - previous;
+        for (let i = 1; i < span; i++) {
+          stops[previous + i].position = start + (end - start) * (i / span);
+        }
+        previous = next;
+      }
+      for (let i = 1; i < stops.length; i++) {
+        stops[i].position = Math.max(stops[i - 1].position, stops[i].position);
+      }
     }
 
     /** Parse first drop/outer box-shadow into a Figma-like effect. */
@@ -897,18 +937,21 @@
       const w = Math.max(Math.ceil(width), 1);
       const h = Math.max(Math.ceil(height), 1);
       try {
+        const style = ((imgEl.ownerDocument && imgEl.ownerDocument.defaultView) || window)
+          .getComputedStyle(imgEl);
+        const options = { objectFit: style.objectFit, objectPosition: style.objectPosition };
         if (imgEl.complete && imgEl.naturalWidth) {
-          return await drawImageToPngBase64(imgEl, w, h);
+          return await drawImageToPngBase64(imgEl, w, h, 2, options);
         }
         const src = imgEl.currentSrc || imgEl.src;
         if (!src) return null;
-        return await drawUrlToPngBase64(src, w, h);
+        return await drawUrlToPngBase64(src, w, h, 2, options);
       } catch (e) {
         return null;
       }
     }
 
-    function drawUrlToPngBase64(url, w, h, scale) {
+    function drawUrlToPngBase64(url, w, h, scale, options) {
       const pixelScale = scale || 2;
       return new Promise(function (resolve, reject) {
         const img = new Image();
@@ -921,7 +964,7 @@
         img.onload = async function () {
           if (done) return;
           try {
-            const b64 = await drawImageToPngBase64(img, w, h, pixelScale);
+            const b64 = await drawImageToPngBase64(img, w, h, pixelScale, options);
             done = true;
             clearTimeout(timer);
             resolve(b64);
@@ -941,14 +984,44 @@
       });
     }
 
-    function drawImageToPngBase64(img, w, h, scale) {
+    function drawImageToPngBase64(img, w, h, scale, options) {
       const pixelScale = scale || 2;
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(Math.round(w * pixelScale), 1);
       canvas.height = Math.max(Math.round(h * pixelScale), 1);
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const fit = options && options.objectFit ? options.objectFit : 'fill';
+      const naturalWidth = img.naturalWidth || img.width || w;
+      const naturalHeight = img.naturalHeight || img.height || h;
+      let drawWidth = w;
+      let drawHeight = h;
+      if (fit !== 'fill') {
+        const containScale = Math.min(w / naturalWidth, h / naturalHeight);
+        const coverScale = Math.max(w / naturalWidth, h / naturalHeight);
+        let imageScale = fit === 'cover' ? coverScale : containScale;
+        if (fit === 'none') imageScale = 1;
+        if (fit === 'scale-down') imageScale = Math.min(1, containScale);
+        drawWidth = naturalWidth * imageScale;
+        drawHeight = naturalHeight * imageScale;
+      }
+      const position = parseObjectPosition(options && options.objectPosition);
+      const drawX = (w - drawWidth) * position.x;
+      const drawY = (h - drawHeight) * position.y;
+      ctx.scale(pixelScale, pixelScale);
+      ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
       return dataUrlToRawBase64(canvas.toDataURL('image/png'));
+    }
+
+    function parseObjectPosition(raw) {
+      const tokens = String(raw || '50% 50%').trim().split(/\s+/);
+      function positionValue(token) {
+        if (token === 'left' || token === 'top') return 0;
+        if (token === 'right' || token === 'bottom') return 1;
+        if (token === 'center') return 0.5;
+        if (/%$/.test(token)) return clamp01(parseFloat(token) / 100);
+        return 0.5;
+      }
+      return { x: positionValue(tokens[0]), y: positionValue(tokens[1] || '50%') };
     }
 
     // -------------------------------------------------------------------------
@@ -1176,6 +1249,7 @@
         try {
           const svgMarkup = serializeSvgElement(el, width || 24, height || 24);
           if (svgMarkup) {
+            captureStats.vectorSvgs++;
             node.svgMarkup = svgMarkup;
             node.name = 'svg';
             node.backgroundColor = null;
@@ -1198,6 +1272,7 @@
           if (png) {
             const id = nextImageId();
             imageStore[id] = png;
+            captureStats.rasterImages++;
             node.imageRef = id;
           }
         } catch (e) { /* placeholder fill */ }
@@ -1214,6 +1289,7 @@
           if (png) {
             const id = nextImageId();
             imageStore[id] = png;
+            captureStats.rasterBackgrounds++;
             // Keep children (tags/overlays) — paint the look as an image sibling behind them
             node.children.push({
               tag: 'div',
@@ -1456,6 +1532,7 @@
     /** Render the source in a real isolated document so page-level CSS stays intact. */
     async function captureHtmlTree(html) {
       Object.keys(imageStore).forEach(function (k) { delete imageStore[k]; });
+      captureStats = createCaptureStats();
       renderHost.innerHTML = '';
 
       const runScripts = !!(runScriptsInput && runScriptsInput.checked);
@@ -1584,6 +1661,7 @@
             images: Object.assign({}, imageStore),
             viewportWidth: viewportWidth,
             viewportHeight: viewportHeight,
+            captureStats: captureStats,
             asComponent: asComponentInput.checked
           }
         }, '*');
@@ -1607,7 +1685,13 @@
       setImporting(false);
       if (msg.type === 'done') {
         setStatus('Imported · ' + msg.count + ' layers' +
-          (msg.styles ? ' · ' + msg.styles + ' colors' : ''), 'ok');
+          (msg.styles ? ' · ' + msg.styles + ' colors' : '') +
+          (msg.vectorSvgs ? ' · ' + msg.vectorSvgs + ' vectors' : '') +
+          (msg.rasterFallbacks ? ' · ' + msg.rasterFallbacks + ' raster fallbacks' : '') +
+          (msg.approximations ? ' · ' + msg.approximations + ' approximations' : '') +
+          (msg.fontSubstitutions && msg.fontSubstitutions.length
+            ? ' · fonts: ' + msg.fontSubstitutions.join(', ')
+            : ''), 'ok');
       } else if (msg.type === 'error') {
         setStatus(msg.message, 'error');
       }

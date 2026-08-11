@@ -13,13 +13,20 @@ figma.showUI(__html__, { width: 360, height: 520, themeColors: true });
 const imageHashCache = {};
 const fontFaceCache = new Map();
 const fontAvailability = new Map();
+const fontSubstitutions = new Set();
+let vectorSvgsCreated = 0;
+let vectorSvgFailures = 0;
 figma.ui.onmessage = async (msg) => {
+    var _a;
     if (msg.type !== 'convert' || !msg.tree)
         return;
     try {
         // Fresh image hashes per import; fonts can stay cached across runs.
         for (const key of Object.keys(imageHashCache))
             delete imageHashCache[key];
+        fontSubstitutions.clear();
+        vectorSvgsCreated = 0;
+        vectorSvgFailures = 0;
         // Decode raster assets once up front.
         if (msg.images) {
             for (const [id, b64] of Object.entries(msg.images)) {
@@ -55,6 +62,10 @@ figma.ui.onmessage = async (msg) => {
                 type: 'done',
                 count: countNodes(rootFrame),
                 styles: stylesCreated,
+                vectorSvgs: vectorSvgsCreated,
+                rasterFallbacks: ((_a = msg.captureStats) === null || _a === void 0 ? void 0 : _a.rasterBackgrounds) || 0,
+                approximations: vectorSvgFailures,
+                fontSubstitutions: Array.from(fontSubstitutions),
             });
         }
         else {
@@ -84,9 +95,11 @@ async function buildNode(data, parentOrigin, styles) {
             applyOpacity(svg, effectiveOpacity(data));
             applyBrightness(svg, data.filterBrightness);
             applyEffects(svg, data);
+            vectorSvgsCreated++;
             return svg;
         }
         catch (error) {
+            vectorSvgFailures++;
             console.warn('Failed to create vector SVG', data.name, error);
         }
     }
@@ -169,6 +182,10 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     text.x = relX;
     text.y = relY;
     const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
+    const requestedFamily = (data.fontFamily || '').trim();
+    if (requestedFamily && requestedFamily.toLowerCase() !== font.family.toLowerCase()) {
+        fontSubstitutions.add(`${requestedFamily} → ${font.family}`);
+    }
     await figma.loadFontAsync(font);
     text.fontName = font;
     text.characters = data.text || '';
