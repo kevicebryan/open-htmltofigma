@@ -37,13 +37,14 @@ npm install && npm run build
 |------|--------|
 | Structure, flex/grid layout | Nested Frames at measured positions |
 | Colors, gradients, asymmetric radii, shadows | Fills / strokes / effects |
-| LTR and RTL text | Direction-aware editable Text layers |
+| LTR and RTL text | Direction-aware editable Text layers with browser whitespace and closest available font weights |
 | SVG | Editable vectors with computed colors, rotation, opacity, and brightness |
 | Images / complex backgrounds | Correctly fitted image fills; selective raster fallback when needed |
+| Fallback-only symbols and emoji | Crisp transparent glyph layers rendered by the browser |
 
 **Closer match:** use a full document with inline CSS, install page fonts in Figma, and choose the matching viewport preset. Mobile capture uses a `390 × 844` viewport so fixed-height app screens and viewport units are measured predictably. Try [`examples/`](examples/).
 
-After each import, the plugin reports vector SVGs, raster fallbacks, approximated SVGs, and substituted font families. Treat substitutions as a signal to install the requested font before comparing visual fidelity.
+After each import, the plugin reports vector SVGs, raster fallbacks, approximated SVGs, and font-face substitutions. A substitution includes the requested and selected family, style, and numeric weight; treat it as a signal to install the requested face before comparing visual fidelity.
 
 **JS-rendered pages** (content built by an inline `<script>`, not present in the raw HTML): tick **Execute page scripts** before importing. Off by default — only enable it for HTML you trust, since it lets the page’s own script run.
 
@@ -57,11 +58,13 @@ Absolute positions from real layout (not Auto Layout rewrite). That’s intentio
 
 ## Fidelity behavior
 
-The converter favors editable native Figma layers. It resolves logical `start` / `end` text alignment from each element's computed direction, protects browser-single-line text from Figma rewrapping, and preserves individual corner radii. Supported inline SVGs remain vectors; unsupported visual backgrounds are rasterized at the smallest useful subtree.
+The converter favors editable native Figma layers. It resolves logical `start` / `end` text alignment from each element's computed direction, applies computed CSS whitespace rules, groups bidi fragments into visual lines, and protects browser-single-line text from Figma rewrapping. Font faces are selected from Figma's available-font inventory using CSS weight fallback order, so a missing `600` face prefers `700` before a lighter face.
+
+Supported inline SVGs remain vectors. Their imported artwork is kept unclipped inside a separate wrapper that owns the browser's SVG viewport, opacity, and effects. Unsupported visual backgrounds are rasterized at the smallest useful subtree. Symbol-only runs that depend on browser font fallback are rendered as transparent 2× glyph layers because Figma cannot reproduce per-glyph browser fallback reliably.
 
 ## Limits
 
-Font substitution if faces aren’t in Figma; complex 3D transforms, masks, animations, and some multi-layer CSS paints; CORS-restricted images; mixed inline text styles. Supported opacity, brightness, layer blur, and backdrop blur are translated to Figma effects. Unsupported looks fall back to a local raster instead of disappearing and are reported after import.
+Font substitution if faces aren’t in Figma; complex 3D transforms, masks, animations, and some multi-layer CSS paints; CORS-restricted images; mixed inline text styles. Supported opacity, brightness, layer blur, and backdrop blur are translated to Figma effects. Unsupported looks and fallback-dependent symbol runs use a local raster instead of disappearing and are reported after import.
 
 ## License
 
