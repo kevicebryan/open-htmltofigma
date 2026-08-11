@@ -1063,6 +1063,7 @@
         letterSpacing: letterSpacing,
         textAlign: style.textAlign || 'left',
         direction: style.direction === 'rtl' ? 'rtl' : 'ltr',
+        whiteSpace: style.whiteSpace || 'normal',
         textTransform: style.textTransform || 'none',
         textColor: parseCssColor(style.color)
       };
@@ -1073,6 +1074,33 @@
       return rects.filter(function (rect) {
         return rect.width > 0 && rect.height > 0;
       });
+    }
+
+    function countVisualTextLines(rects) {
+      if (!rects.length) return 0;
+      const lines = [];
+      rects.slice().sort(function (a, b) { return a.top - b.top; }).forEach(function (rect) {
+        const tolerance = Math.max(0.75, Math.min(rect.height * 0.15, 2));
+        const existingLine = lines.some(function (top) {
+          return Math.abs(top - rect.top) <= tolerance;
+        });
+        if (!existingLine) lines.push(rect.top);
+      });
+      return lines.length;
+    }
+
+    function normalizeTextForWhiteSpace(text, whiteSpace) {
+      const value = String(text || '').replace(/\r\n?/g, '\n');
+      if (whiteSpace === 'pre' || whiteSpace === 'pre-wrap' || whiteSpace === 'break-spaces') {
+        return value;
+      }
+      if (whiteSpace === 'pre-line') {
+        return value
+          .replace(/[\t\f ]+/g, ' ')
+          .replace(/ *\n */g, '\n')
+          .trim();
+      }
+      return value.replace(/\s+/g, ' ').trim();
     }
 
     function applyTextTransform(text, transform) {
@@ -1141,6 +1169,7 @@
         letterSpacing: opts.letterSpacing || 0,
         textAlign: opts.textAlign || 'left',
         direction: opts.direction || 'ltr',
+        whiteSpace: opts.whiteSpace || 'normal',
         singleLine: !!opts.singleLine,
         textColor: opts.textColor,
         children: []
@@ -1155,7 +1184,8 @@
       if (style.display === 'none' || style.visibility === 'hidden') return null;
 
       const rect = el.getBoundingClientRect();
-      const textContent = (el.textContent || '').trim();
+      const rawTextContent = el.textContent || '';
+      const textContent = rawTextContent.trim();
       if (rect.width === 0 && rect.height === 0 && !textContent && el.tagName !== 'SVG') return null;
       if (rect.height < 1 && style.overflow === 'hidden' && parseFloat(style.maxHeight) === 0) return null;
 
@@ -1222,12 +1252,13 @@
       };
 
       if (isText) {
-        let text = textContent;
+        let text = rawTextContent;
         const before = readPseudoContent(el, '::before', win);
         const after = readPseudoContent(el, '::after', win);
         if (before) text = before.text + (before.text.length === 1 ? ' ' : '') + text;
         if (after) text = text + after.text;
         const ts = textStyleFrom(style);
+        text = normalizeTextForWhiteSpace(text, ts.whiteSpace);
         text = applyTextTransform(text, ts.textTransform);
         node.text = text;
         node.fontFamily = ts.fontFamily;
@@ -1238,9 +1269,10 @@
         node.letterSpacing = ts.letterSpacing;
         node.textAlign = ts.textAlign;
         node.direction = ts.direction;
+        node.whiteSpace = ts.whiteSpace;
         const textRange = el.ownerDocument.createRange();
         textRange.selectNodeContents(el);
-        node.singleLine = getTextLineRects(textRange).length <= 1;
+        node.singleLine = countVisualTextLines(getTextLineRects(textRange)) <= 1;
         node.textColor = ts.textColor;
         return node;
       }
@@ -1331,13 +1363,15 @@
           const lineRects = getTextLineRects(range);
           if (r.width === 0 && r.height === 0) continue;
           const ts = textStyleFrom(style);
+          const text = normalizeTextForWhiteSpace(raw, ts.whiteSpace);
+          if (!text) continue;
           node.children.push(makeTextNode({
             name: 'text',
             x: r.left - hostRect.left,
             y: r.top - hostRect.top,
             width: r.width,
             height: Math.max(r.height, ts.fontSize),
-            text: applyTextTransform(raw.replace(/\s+/g, ' '), ts.textTransform),
+            text: applyTextTransform(text, ts.textTransform),
             fontFamily: ts.fontFamily,
             fontSize: ts.fontSize,
             fontWeight: ts.fontWeight,
@@ -1346,7 +1380,8 @@
             letterSpacing: ts.letterSpacing,
             textAlign: ts.textAlign,
             direction: ts.direction,
-            singleLine: lineRects.length <= 1,
+            whiteSpace: ts.whiteSpace,
+            singleLine: countVisualTextLines(lineRects) <= 1,
             textColor: ts.textColor
           }));
         } else if (child.nodeType === 1) {
