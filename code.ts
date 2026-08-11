@@ -73,6 +73,7 @@ interface SerializedHtmlNode {
   letterSpacing?: number;
   textAlign?: string;
   direction?: 'ltr' | 'rtl';
+  browserTextTopOffset?: number;
   singleLine?: boolean;
   textColor?: Rgba | null;
   imageSrc?: string;
@@ -326,7 +327,7 @@ async function buildTextNode(
   const text = figma.createText();
   text.name = data.name;
   text.x = relX;
-  text.y = relY;
+  text.y = browserAlignedTextY(data, relY);
 
   const resolvedFont = await resolveFont(
     data.fontFamily,
@@ -396,6 +397,14 @@ async function buildTextNode(
   applyOpacity(text, effectiveOpacity(data));
   applyEffects(text, data);
   return text;
+}
+
+function browserAlignedTextY(data: SerializedHtmlNode, relY: number): number {
+  if (data.browserTextTopOffset === undefined) return relY;
+  const fontSize = data.fontSize || 12;
+  const lineHeight = data.lineHeight || fontSize * 1.2;
+  const figmaLeading = (lineHeight - fontSize) / 2;
+  return relY + data.browserTextTopOffset - figmaLeading;
 }
 
 // ---------------------------------------------------------------------------

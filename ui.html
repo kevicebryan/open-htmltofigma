@@ -1231,6 +1231,7 @@
         textAlign: opts.textAlign || 'left',
         direction: opts.direction || 'ltr',
         whiteSpace: opts.whiteSpace || 'normal',
+        browserTextTopOffset: opts.browserTextTopOffset,
         singleLine: !!opts.singleLine,
         textColor: opts.textColor,
         children: []
@@ -1357,6 +1358,8 @@
         node.whiteSpace = ts.whiteSpace;
         const textRange = el.ownerDocument.createRange();
         textRange.selectNodeContents(el);
+        const textRect = textRange.getBoundingClientRect();
+        node.browserTextTopOffset = textRect.top - rect.top;
         node.singleLine = countVisualTextLines(getTextLineRects(textRange)) <= 1;
         node.textColor = ts.textColor;
         return node;
@@ -1466,6 +1469,7 @@
             textAlign: ts.textAlign,
             direction: ts.direction,
             whiteSpace: ts.whiteSpace,
+            browserTextTopOffset: 0,
             singleLine: countVisualTextLines(lineRects) <= 1,
             textColor: ts.textColor
           }));

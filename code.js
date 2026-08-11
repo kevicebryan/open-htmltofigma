@@ -200,7 +200,7 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     const text = figma.createText();
     text.name = data.name;
     text.x = relX;
-    text.y = relY;
+    text.y = browserAlignedTextY(data, relY);
     const resolvedFont = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle, data.text);
     const font = resolvedFont.fontName;
     const requestedFamily = (data.fontFamily || '').trim();
@@ -263,6 +263,14 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     applyOpacity(text, effectiveOpacity(data));
     applyEffects(text, data);
     return text;
+}
+function browserAlignedTextY(data, relY) {
+    if (data.browserTextTopOffset === undefined)
+        return relY;
+    const fontSize = data.fontSize || 12;
+    const lineHeight = data.lineHeight || fontSize * 1.2;
+    const figmaLeading = (lineHeight - fontSize) / 2;
+    return relY + data.browserTextTopOffset - figmaLeading;
 }
 // ---------------------------------------------------------------------------
 // Styles / paints / effects
