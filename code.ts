@@ -116,6 +116,7 @@ figma.ui.onmessage = async (msg: {
   images?: ImageMap;
   viewportWidth?: number;
   viewportHeight?: number;
+  sourceFileName?: string;
   captureStats?: CaptureStats;
   asComponent?: boolean;
 }) => {
@@ -149,15 +150,15 @@ figma.ui.onmessage = async (msg: {
       stylesCreated = await createLocalColorStyles(styleCollector);
 
       const viewport = figma.viewport.center;
-      rootFrame.name =
-        'HTML Import' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
+      const importName = sourceName(msg.sourceFileName) +
+        viewportLabel(msg.viewportWidth, msg.viewportHeight);
+      rootFrame.name = importName;
       rootFrame.x = viewport.x - rootFrame.width / 2;
       rootFrame.y = viewport.y - rootFrame.height / 2;
       figma.currentPage.appendChild(rootFrame);
       if (msg.asComponent) {
         rootFrame = figma.createComponentFromNode(rootFrame);
-        rootFrame.name =
-          'HTML Component' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
+        rootFrame.name = importName;
       }
       figma.currentPage.selection = [rootFrame];
       figma.viewport.scrollAndZoomIntoView([rootFrame]);
@@ -856,4 +857,9 @@ function countNodes(node: BaseNode): number {
 function viewportLabel(width?: number, height?: number): string {
   if (!width) return '';
   return ` · ${width}${height ? `×${height}` : ''}px`;
+}
+
+function sourceName(fileName?: string): string {
+  const normalized = (fileName || '').trim().replace(/\.(?:html?|xhtml)$/i, '');
+  return normalized || 'HTML Import';
 }

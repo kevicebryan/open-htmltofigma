@@ -47,15 +47,15 @@ figma.ui.onmessage = async (msg) => {
         if (rootFrame) {
             stylesCreated = await createLocalColorStyles(styleCollector);
             const viewport = figma.viewport.center;
-            rootFrame.name =
-                'HTML Import' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
+            const importName = sourceName(msg.sourceFileName) +
+                viewportLabel(msg.viewportWidth, msg.viewportHeight);
+            rootFrame.name = importName;
             rootFrame.x = viewport.x - rootFrame.width / 2;
             rootFrame.y = viewport.y - rootFrame.height / 2;
             figma.currentPage.appendChild(rootFrame);
             if (msg.asComponent) {
                 rootFrame = figma.createComponentFromNode(rootFrame);
-                rootFrame.name =
-                    'HTML Component' + viewportLabel(msg.viewportWidth, msg.viewportHeight);
+                rootFrame.name = importName;
             }
             figma.currentPage.selection = [rootFrame];
             figma.viewport.scrollAndZoomIntoView([rootFrame]);
@@ -702,4 +702,8 @@ function viewportLabel(width, height) {
     if (!width)
         return '';
     return ` · ${width}${height ? `×${height}` : ''}px`;
+}
+function sourceName(fileName) {
+    const normalized = (fileName || '').trim().replace(/\.(?:html?|xhtml)$/i, '');
+    return normalized || 'HTML Import';
 }

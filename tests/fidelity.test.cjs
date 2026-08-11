@@ -157,3 +157,18 @@ test('separates SVG artwork clipping from its CSS viewport', async () => {
   assert.equal(wrapper.x, -65);
   assert.equal(wrapper.y, -90);
 });
+
+test('names imports from the HTML filename and viewport', () => {
+  const context = loadPlugin();
+  vm.runInContext(
+    'globalThis.importNameForTest = (file, width, height) => sourceName(file) + viewportLabel(width, height);',
+    context
+  );
+
+  assert.equal(
+    context.importNameForTest('01-intro-rules.html', 390, 844),
+    '01-intro-rules · 390×844px'
+  );
+  assert.equal(context.importNameForTest('landing.xhtml', 1440, 900), 'landing · 1440×900px');
+  assert.equal(context.importNameForTest('', 390, 844), 'HTML Import · 390×844px');
+});

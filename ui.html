@@ -437,6 +437,7 @@
     let viewportHeight = 900;
     let isImporting = false;
     let importTimeout = null;
+    let sourceFileName = '';
     const imageStore = {}; // id -> raw base64 PNG (no data: prefix)
     let captureStats = createCaptureStats();
 
@@ -478,6 +479,7 @@
 
     function resetFilePicker() {
       fileInput.value = '';
+      sourceFileName = '';
       fileZone.classList.remove('has-file');
       fileTitle.textContent = 'Choose HTML file';
       fileDesc.textContent = '.html or .htm';
@@ -504,6 +506,7 @@
       }
       try {
         htmlInput.value = await file.text();
+        sourceFileName = file.name;
         fileZone.classList.add('has-file');
         fileTitle.textContent = file.name;
         fileDesc.textContent = Math.max(1, Math.round(file.size / 1024)) + ' KB loaded';
@@ -1755,6 +1758,7 @@
             images: Object.assign({}, imageStore),
             viewportWidth: viewportWidth,
             viewportHeight: viewportHeight,
+            sourceFileName: sourceFileName,
             captureStats: captureStats,
             asComponent: asComponentInput.checked
           }
