@@ -14,9 +14,10 @@ Not in scope: URL crawling, site-wide import, or rewriting flex as Figma Auto La
    - `getBoundingClientRect()` (x, y, width, height vs page origin)
    - computed styles (fill, per-corner radius, opacity, effects, type, direction, whitespace)
    - visual text lines grouped by vertical position so bidi fragments do not look like extra lines
+   - browser text-content bounds separately from layout-container bounds
    - inline SVG with recursively resolved computed paint styles
    - rasterized `<img>` and unsupported background subtrees as PNG bytes
-4. **Main thread** inventories available fonts, resolves the closest CSS-compatible face, and rebuilds Frames, direction-aware Text, native vectors, and rectangles with image fills.
+4. **Main thread** inventories available fonts, resolves the closest CSS-compatible face, aligns Figma text to browser line boxes, applies direction hints where numeric/neutral runs need them, and rebuilds Frames, direction-aware Text, native vectors, and rectangles with image fills.
 5. Child positions are **parent-relative** (`child.x - parent.x`), so nesting matches the DOM while layout matches the browser.
 
 Flex, grid, absolute CSS, etc. are handled by the browser. We only measure the result.

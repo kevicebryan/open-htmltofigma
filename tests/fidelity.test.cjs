@@ -44,12 +44,19 @@ function loadUiTextHelpers() {
   const end = source.indexOf('    function applyTextTransform', start);
   const symbolStart = source.indexOf('    function isFallbackDependentSymbolText');
   const symbolEnd = source.indexOf('    async function rasterizeSymbolText', symbolStart);
-  assert.ok(start >= 0 && end > start && symbolStart >= 0 && symbolEnd > symbolStart);
+  const containerStart = source.indexOf('    function needsTextLayoutContainer');
+  const containerEnd = source.indexOf('    function buildNodeName', containerStart);
+  assert.ok(
+    start >= 0 && end > start && symbolStart >= 0 && symbolEnd > symbolStart &&
+      containerStart >= 0 && containerEnd > containerStart
+  );
   const context = {};
   vm.createContext(context);
   vm.runInContext(
     `${source.slice(start, end)}\n${source.slice(symbolStart, symbolEnd)}\n` +
-      'globalThis.helpers = { countVisualTextLines, normalizeTextForWhiteSpace, isFallbackDependentSymbolText };',
+      `${source.slice(containerStart, containerEnd)}\n` +
+      'globalThis.helpers = { countVisualTextLines, normalizeTextForWhiteSpace, ' +
+      'isFallbackDependentSymbolText, needsTextLayoutContainer };',
     context
   );
   return context.helpers;
@@ -89,6 +96,23 @@ test('limits browser glyph rasterization to symbol-only runs', () => {
   assert.equal(isFallbackDependentSymbolText('≋'), true);
   assert.equal(isFallbackDependentSymbolText('الوقت ١٠'), false);
   assert.equal(isFallbackDependentSymbolText('ordinary text'), false);
+});
+
+test('keeps text-only layout boxes as containers', () => {
+  const { needsTextLayoutContainer } = loadUiTextHelpers();
+  const plainStyle = {
+    display: 'inline',
+    paddingTop: '0px',
+    paddingRight: '0px',
+    paddingBottom: '0px',
+    paddingLeft: '0px',
+  };
+  const plainVisual = { solid: null, gradient: null, borderWidth: 0, shadows: null };
+
+  assert.equal(needsTextLayoutContainer({ ...plainStyle, display: 'flex' }, plainVisual), true);
+  assert.equal(needsTextLayoutContainer({ ...plainStyle, paddingTop: '8px' }, plainVisual), true);
+  assert.equal(needsTextLayoutContainer(plainStyle, { ...plainVisual, borderWidth: 1 }), true);
+  assert.equal(needsTextLayoutContainer(plainStyle, plainVisual), false);
 });
 
 test('uses CSS weight fallback order within the requested family', async () => {
@@ -171,4 +195,37 @@ test('names imports from the HTML filename and viewport', () => {
   );
   assert.equal(context.importNameForTest('landing.xhtml', 1440, 900), 'landing · 1440×900px');
   assert.equal(context.importNameForTest('', 390, 844), 'HTML Import · 390×844px');
+});
+
+test('aligns Figma text to browser content bounds and line leading', () => {
+  const context = loadPlugin();
+  vm.runInContext('globalThis.browserAlignedTextYForTest = browserAlignedTextY;', context);
+
+  assert.equal(
+    context.browserAlignedTextYForTest(
+      { fontSize: 14.5, lineHeight: 17.4, browserTextTopOffset: 0 },
+      110.5
+    ),
+    109.05
+  );
+  assert.equal(
+    context.browserAlignedTextYForTest(
+      { fontSize: 13.5, lineHeight: 22.275, browserTextTopOffset: 0 },
+      74
+    ),
+    69.6125
+  );
+  assert.equal(context.browserAlignedTextYForTest({}, 42), 42);
+});
+
+test('adds bidi hints only when Figma cannot infer browser direction', () => {
+  const context = loadPlugin();
+  vm.runInContext('globalThis.bidiHintsForTest = applyBidiDirectionHints;', context);
+
+  assert.equal(context.bidiHintsForTest('١٠٠٪', 'rtl'), '\u200F١٠٠٪');
+  assert.equal(context.bidiHintsForTest('نتيجتك: ١٠٠٪', 'rtl'), 'نتيجتك: ١٠٠٪');
+  assert.equal(context.bidiHintsForTest('100%', 'rtl'), '\u200F100%');
+  assert.equal(context.bidiHintsForTest('العربية', 'ltr'), '\u200Eالعربية');
+  assert.equal(context.bidiHintsForTest('plain', 'ltr'), 'plain');
+  assert.equal(context.bidiHintsForTest('\u200F١٠٠٪', 'rtl'), '\u200F١٠٠٪');
 });

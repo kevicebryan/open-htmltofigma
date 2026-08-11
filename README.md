@@ -58,7 +58,9 @@ Absolute positions from real layout (not Auto Layout rewrite). That’s intentio
 
 ## Fidelity behavior
 
-The converter favors editable native Figma layers. It resolves logical `start` / `end` text alignment from each element's computed direction, applies computed CSS whitespace rules, groups bidi fragments into visual lines, and protects browser-single-line text from Figma rewrapping. Font faces are selected from Figma's available-font inventory using CSS weight fallback order, so a missing `600` face prefers `700` before a lighter face.
+The converter favors editable native Figma layers. It resolves logical `start` / `end` text alignment from each element's computed direction, applies computed CSS whitespace rules, groups bidi fragments into visual lines, and protects browser-single-line text from Figma rewrapping. Text-only flex, grid, padded, and painted elements remain Frames with independently measured text children, preserving internal alignment and spacing. Browser text bounds and line-height leading are translated into Figma coordinates to reduce baseline drift.
+
+Numeric or neutral text that cannot communicate its paragraph direction to Figma receives a zero-width Unicode direction hint. This preserves browser ordering for RTL percentages such as `١٠٠٪` without changing ordinary Arabic text. Font faces are selected from Figma's available-font inventory using CSS weight fallback order, so a missing `600` face prefers `700` before a lighter face.
 
 Supported inline SVGs remain vectors. Their imported artwork is kept unclipped inside a separate wrapper that owns the browser's SVG viewport, opacity, and effects. Unsupported visual backgrounds are rasterized at the smallest useful subtree. Symbol-only runs that depend on browser font fallback are rendered as transparent 2× glyph layers because Figma cannot reproduce per-glyph browser fallback reliably.
 
