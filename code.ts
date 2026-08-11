@@ -87,6 +87,7 @@ interface CaptureStats {
   vectorSvgs: number;
   rasterImages: number;
   rasterBackgrounds: number;
+  rasterGlyphs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +167,9 @@ figma.ui.onmessage = async (msg: {
         count: countNodes(rootFrame),
         styles: stylesCreated,
         vectorSvgs: vectorSvgsCreated,
-        rasterFallbacks: msg.captureStats?.rasterBackgrounds || 0,
+        rasterFallbacks:
+          (msg.captureStats?.rasterBackgrounds || 0) +
+          (msg.captureStats?.rasterGlyphs || 0),
         approximations: vectorSvgFailures,
         fontSubstitutions: Array.from(fontSubstitutions),
       });

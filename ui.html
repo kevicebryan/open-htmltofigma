@@ -441,7 +441,7 @@
     let captureStats = createCaptureStats();
 
     function createCaptureStats() {
-      return { vectorSvgs: 0, rasterImages: 0, rasterBackgrounds: 0 };
+      return { vectorSvgs: 0, rasterImages: 0, rasterBackgrounds: 0, rasterGlyphs: 0 };
     }
 
     viewportBtns.forEach(function (btn) {
@@ -650,6 +650,48 @@
       try {
         // scale=1 — backgrounds are already downsampled via maxEdge
         return await drawUrlToPngBase64(url, rw, rh, 1);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function isFallbackDependentSymbolText(text) {
+      const compact = String(text || '').replace(/\s+/g, '');
+      return !!compact &&
+        !/[\p{L}\p{N}]/u.test(compact) &&
+        /\p{S}/u.test(compact);
+    }
+
+    async function rasterizeSymbolText(el, text, width, height) {
+      const w = Math.max(Math.ceil(width), 1);
+      const h = Math.max(Math.ceil(height), 1);
+      const win = (el.ownerDocument && el.ownerDocument.defaultView) || window;
+      const cs = win.getComputedStyle(el);
+      const clone = el.cloneNode(false);
+      clone.textContent = text;
+      const props = [
+        'color', 'font-family', 'font-size', 'font-style', 'font-weight',
+        'font-stretch', 'font-variant', 'font-feature-settings', 'line-height',
+        'letter-spacing', 'text-align', 'text-rendering', 'direction',
+        'unicode-bidi', 'white-space'
+      ];
+      let cssText =
+        'display:block;width:' + w + 'px;height:' + h +
+        'px;margin:0;padding:0;border:0;background:transparent;box-sizing:border-box;overflow:visible;';
+      for (let i = 0; i < props.length; i++) {
+        const value = cs.getPropertyValue(props[i]);
+        if (value) cssText += props[i] + ':' + value + ';';
+      }
+      clone.setAttribute('style', cssText);
+      const wrapper =
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="width:' + w +
+        'px;height:' + h + 'px;overflow:visible;">' + clone.outerHTML + '</div>';
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+        '<foreignObject width="100%" height="100%">' + wrapper + '</foreignObject></svg>';
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      try {
+        return await drawUrlToPngBase64(url, w, h, 2);
       } catch (e) {
         return null;
       }
@@ -1260,6 +1302,23 @@
         const ts = textStyleFrom(style);
         text = normalizeTextForWhiteSpace(text, ts.whiteSpace);
         text = applyTextTransform(text, ts.textTransform);
+        if (isFallbackDependentSymbolText(text)) {
+          try {
+            const png = await rasterizeSymbolText(el, text, width, height);
+            if (png) {
+              const id = nextImageId();
+              imageStore[id] = png;
+              captureStats.rasterGlyphs++;
+              node.name = 'glyphs:' + text;
+              node.isText = false;
+              node.isImage = true;
+              node.imageRef = id;
+              node.backgroundColor = null;
+              node.gradient = null;
+              return node;
+            }
+          } catch (e) { /* keep editable text when rasterization is unavailable */ }
+        }
         node.text = text;
         node.fontFamily = ts.fontFamily;
         node.fontSize = ts.fontSize;

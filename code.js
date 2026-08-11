@@ -18,7 +18,7 @@ let availableFontInventoryPromise = null;
 let vectorSvgsCreated = 0;
 let vectorSvgFailures = 0;
 figma.ui.onmessage = async (msg) => {
-    var _a;
+    var _a, _b;
     if (msg.type !== 'convert' || !msg.tree)
         return;
     try {
@@ -64,7 +64,8 @@ figma.ui.onmessage = async (msg) => {
                 count: countNodes(rootFrame),
                 styles: stylesCreated,
                 vectorSvgs: vectorSvgsCreated,
-                rasterFallbacks: ((_a = msg.captureStats) === null || _a === void 0 ? void 0 : _a.rasterBackgrounds) || 0,
+                rasterFallbacks: (((_a = msg.captureStats) === null || _a === void 0 ? void 0 : _a.rasterBackgrounds) || 0) +
+                    (((_b = msg.captureStats) === null || _b === void 0 ? void 0 : _b.rasterGlyphs) || 0),
                 approximations: vectorSvgFailures,
                 fontSubstitutions: Array.from(fontSubstitutions),
             });
