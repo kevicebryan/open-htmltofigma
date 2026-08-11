@@ -74,6 +74,22 @@ async function buildNode(data, parentOrigin, styles) {
     const relY = parentOrigin ? data.y - parentOrigin.y : 0;
     const w = Math.max(data.width, 1);
     const h = Math.max(data.height, 1);
+    if (data.isSvg && data.svgMarkup) {
+        try {
+            const svg = figma.createNodeFromSvg(data.svgMarkup);
+            svg.name = data.name || 'svg';
+            svg.resize(w, h);
+            svg.x = relX;
+            svg.y = relY;
+            applyOpacity(svg, effectiveOpacity(data));
+            applyBrightness(svg, data.filterBrightness);
+            applyEffects(svg, data);
+            return svg;
+        }
+        catch (error) {
+            console.warn('Failed to create vector SVG', data.name, error);
+        }
+    }
     // Rasterized SVG / <img>
     if (data.isImage) {
         const rect = figma.createRectangle();
@@ -93,10 +109,10 @@ async function buildNode(data, parentOrigin, styles) {
         else {
             rect.fills = buildsFills(data, { r: 0.93, g: 0.9, b: 0.82, a: 1 }, styles);
         }
-        applyOpacity(rect, data.opacity);
+        applyOpacity(rect, effectiveOpacity(data));
         applyCornerRadii(rect, data);
         applyStroke(rect, data, styles);
-        applyShadows(rect, data.boxShadows);
+        applyEffects(rect, data);
         return rect;
     }
     // Unrasterized SVG fallback
@@ -117,7 +133,8 @@ async function buildNode(data, parentOrigin, styles) {
             },
         ];
         ellipse.strokeWeight = Math.max(data.strokeWidth || 1.5, 1);
-        applyOpacity(ellipse, data.opacity);
+        applyOpacity(ellipse, effectiveOpacity(data));
+        applyEffects(ellipse, data);
         return ellipse;
     }
     if (data.isText && data.text) {
@@ -129,10 +146,10 @@ async function buildNode(data, parentOrigin, styles) {
     frame.x = relX;
     frame.y = relY;
     frame.fills = buildsFills(data, null, styles);
-    applyOpacity(frame, data.opacity);
+    applyOpacity(frame, effectiveOpacity(data));
     applyCornerRadii(frame, data);
     applyStroke(frame, data, styles);
-    applyShadows(frame, data.boxShadows);
+    applyEffects(frame, data);
     const overflow = (data.overflow || 'visible').toLowerCase();
     frame.clipsContent =
         overflow === 'hidden' ||
@@ -199,7 +216,8 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
             // keep default
         }
     }
-    applyOpacity(text, data.opacity);
+    applyOpacity(text, effectiveOpacity(data));
+    applyEffects(text, data);
     return text;
 }
 // ---------------------------------------------------------------------------
@@ -298,10 +316,9 @@ function toLinearGradientPaint(gradient) {
     ];
     return { type: 'GRADIENT_LINEAR', gradientStops: stops, gradientTransform };
 }
-function applyShadows(node, shadows) {
-    if (!shadows || shadows.length === 0)
-        return;
-    node.effects = shadows.map((shadow) => ({
+function applyEffects(node, data) {
+    const shadows = data.boxShadows || [];
+    const effects = shadows.map((shadow) => ({
         type: shadow.type,
         color: {
             r: shadow.color.r,
@@ -315,6 +332,19 @@ function applyShadows(node, shadows) {
         visible: true,
         blendMode: 'NORMAL',
     }));
+    if (data.layerBlur && data.layerBlur > 0) {
+        effects.push({ type: 'LAYER_BLUR', blurType: 'NORMAL', radius: data.layerBlur, visible: true });
+    }
+    if (data.backdropBlur && data.backdropBlur > 0) {
+        effects.push({
+            type: 'BACKGROUND_BLUR',
+            blurType: 'NORMAL',
+            radius: data.backdropBlur,
+            visible: true,
+        });
+    }
+    if (effects.length > 0)
+        node.effects = effects;
 }
 function clamp01(n) {
     if (n < 0)
@@ -326,6 +356,39 @@ function clamp01(n) {
 function applyOpacity(node, opacity) {
     if (opacity < 1 && opacity >= 0)
         node.opacity = opacity;
+}
+function effectiveOpacity(data) {
+    return clamp01(data.opacity * (data.filterOpacity === undefined ? 1 : data.filterOpacity));
+}
+function applyBrightness(node, brightness) {
+    if (brightness === undefined || Math.abs(brightness - 1) < 0.001)
+        return;
+    if ('fills' in node && Array.isArray(node.fills)) {
+        node.fills = adjustPaintBrightness(node.fills, brightness);
+    }
+    if ('strokes' in node && Array.isArray(node.strokes)) {
+        node.strokes = adjustPaintBrightness(node.strokes, brightness);
+    }
+    if ('children' in node) {
+        for (const child of node.children)
+            applyBrightness(child, brightness);
+    }
+}
+function adjustPaintBrightness(paints, brightness) {
+    return paints.map((paint) => {
+        if (paint.type === 'SOLID') {
+            return Object.assign(Object.assign({}, paint), { color: {
+                    r: clamp01(paint.color.r * brightness),
+                    g: clamp01(paint.color.g * brightness),
+                    b: clamp01(paint.color.b * brightness),
+                } });
+        }
+        if (paint.type === 'GRADIENT_LINEAR' || paint.type === 'GRADIENT_RADIAL' ||
+            paint.type === 'GRADIENT_ANGULAR' || paint.type === 'GRADIENT_DIAMOND') {
+            return Object.assign(Object.assign({}, paint), { gradientStops: paint.gradientStops.map((stop) => (Object.assign(Object.assign({}, stop), { color: Object.assign(Object.assign({}, stop.color), { r: clamp01(stop.color.r * brightness), g: clamp01(stop.color.g * brightness), b: clamp01(stop.color.b * brightness) }) }))) });
+        }
+        return paint;
+    });
 }
 function applyCornerRadii(node, data) {
     if (!('cornerRadius' in node))

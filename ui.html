@@ -808,7 +808,62 @@
       return i >= 0 ? dataUrl.slice(i + 7) : dataUrl;
     }
 
-    async function rasterizeSvgElement(svgEl, width, height) {
+    function parseFilterEffects(style) {
+      const filter = style.filter || 'none';
+      const backdrop = style.backdropFilter || style.webkitBackdropFilter || 'none';
+      const opacityMatch = filter.match(/opacity\(\s*([\d.]+)(%)?\s*\)/i);
+      const brightnessMatch = filter.match(/brightness\(\s*([\d.]+)(%)?\s*\)/i);
+      const blurMatch = filter.match(/blur\(\s*([\d.]+)px\s*\)/i);
+      const backdropBlurMatch = backdrop.match(/blur\(\s*([\d.]+)px\s*\)/i);
+
+      function ratio(match) {
+        if (!match) return 1;
+        const value = parseFloat(match[1]);
+        return match[2] ? value / 100 : value;
+      }
+
+      return {
+        filterOpacity: ratio(opacityMatch),
+        filterBrightness: ratio(brightnessMatch),
+        layerBlur: blurMatch ? parseFloat(blurMatch[1]) : 0,
+        backdropBlur: backdropBlurMatch ? parseFloat(backdropBlurMatch[1]) : 0
+      };
+    }
+
+    function inlineSvgComputedStyles(source, clone, win) {
+      const sourceNodes = [source].concat(Array.prototype.slice.call(source.querySelectorAll('*')));
+      const cloneNodes = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*')));
+      const props = [
+        'color', 'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width',
+        'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit',
+        'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'clip-rule',
+        'paint-order', 'vector-effect'
+      ];
+
+      for (let i = 0; i < sourceNodes.length; i++) {
+        const computed = win.getComputedStyle(sourceNodes[i]);
+        const target = cloneNodes[i];
+        if (!computed || !target) continue;
+        for (let p = 0; p < props.length; p++) {
+          const value = computed.getPropertyValue(props[p]);
+          if (value) target.style.setProperty(props[p], value);
+        }
+      }
+    }
+
+    function rotationFromTransform(transform) {
+      if (!transform || transform === 'none') return 0;
+      const matrix = transform.match(/^matrix\(([^)]+)\)$/);
+      if (!matrix) return 0;
+      const values = matrix[1].split(',').map(function (value) {
+        return parseFloat(value.trim());
+      });
+      if (values.length < 4 || values.some(function (value) { return isNaN(value); })) return 0;
+      const angle = Math.atan2(values[1], values[0]) * 180 / Math.PI;
+      return Math.abs(angle) < 0.01 ? 0 : angle;
+    }
+
+    function serializeSvgElement(svgEl, width, height) {
       const w = Math.max(Math.ceil(width), 1);
       const h = Math.max(Math.ceil(height), 1);
       const clone = svgEl.cloneNode(true);
@@ -816,24 +871,26 @@
       clone.setAttribute('width', String(w));
       clone.setAttribute('height', String(h));
       const win = (svgEl.ownerDocument && svgEl.ownerDocument.defaultView) || window;
-      const cs = win.getComputedStyle(svgEl);
-      if (cs.stroke && cs.stroke !== 'none' && !clone.getAttribute('stroke')) {
-        clone.setAttribute('stroke', cs.stroke);
+      const computed = win.getComputedStyle(svgEl);
+      inlineSvgComputedStyles(svgEl, clone, win);
+
+      // Layout translation is already represented by getBoundingClientRect().
+      // Preserve only the visual rotation inside the SVG viewport.
+      const rotation = rotationFromTransform(computed.transform);
+      if (rotation) {
+        const viewBox = (clone.getAttribute('viewBox') || ('0 0 ' + w + ' ' + h))
+          .trim().split(/[ ,]+/).map(function (value) { return parseFloat(value); });
+        const cx = viewBox.length === 4 ? viewBox[0] + viewBox[2] / 2 : w / 2;
+        const cy = viewBox.length === 4 ? viewBox[1] + viewBox[3] / 2 : h / 2;
+        const group = clone.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('transform', 'rotate(' + rotation + ' ' + cx + ' ' + cy + ')');
+        while (clone.firstChild) group.appendChild(clone.firstChild);
+        clone.appendChild(group);
       }
-      if (cs.fill && cs.fill !== 'none' && (!clone.getAttribute('fill') || clone.getAttribute('fill') === '')) {
-        clone.setAttribute('fill', cs.fill);
-      }
-      clone.querySelectorAll('path, circle, line, polyline, polygon, rect, ellipse').forEach(function (shape) {
-        if (!shape.getAttribute('stroke') && cs.stroke && cs.stroke !== 'none') {
-          shape.setAttribute('stroke', cs.stroke);
-        }
-        if (!shape.getAttribute('stroke-width') && cs.strokeWidth) {
-          shape.setAttribute('stroke-width', cs.strokeWidth);
-        }
-      });
-      const xml = new XMLSerializer().serializeToString(clone);
-      const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-      return await drawUrlToPngBase64(svgUrl, w, h);
+
+      clone.style.removeProperty('transform');
+      clone.removeAttribute('class');
+      return new XMLSerializer().serializeToString(clone);
     }
 
     async function rasterizeImgElement(imgEl, width, height) {
@@ -1042,6 +1099,7 @@
       const cornerRadii = getCornerRadii(style);
       const borderRadius = maxCornerRadius(cornerRadii);
       const opacity = parseFloat(style.opacity);
+      const filterEffects = parseFilterEffects(style);
       const overflow = style.overflow;
       const zIndex = parseInt(style.zIndex, 10);
 
@@ -1070,6 +1128,10 @@
         width: width,
         height: height,
         opacity: isNaN(opacity) ? 1 : opacity,
+        filterOpacity: filterEffects.filterOpacity,
+        filterBrightness: filterEffects.filterBrightness,
+        layerBlur: filterEffects.layerBlur,
+        backdropBlur: filterEffects.backdropBlur,
         backgroundColor: solid,
         gradient: gradient,
         boxShadows: shadows,
@@ -1112,13 +1174,9 @@
 
       if (isSvg) {
         try {
-          const png = await rasterizeSvgElement(el, width || 24, height || 24);
-          if (png) {
-            const id = nextImageId();
-            imageStore[id] = png;
-            node.imageRef = id;
-            node.isImage = true;
-            node.isSvg = false;
+          const svgMarkup = serializeSvgElement(el, width || 24, height || 24);
+          if (svgMarkup) {
+            node.svgMarkup = svgMarkup;
             node.name = 'svg';
             node.backgroundColor = null;
             node.gradient = null;
