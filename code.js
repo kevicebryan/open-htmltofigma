@@ -215,7 +215,7 @@ async function buildTextNode(data, relX, relY, w, h, styles) {
     }
     await figma.loadFontAsync(font);
     text.fontName = font;
-    text.characters = data.text || '';
+    text.characters = applyBidiDirectionHints(data.text || '', data.direction);
     text.fontSize = data.fontSize || 12;
     if (data.lineHeight && data.lineHeight > 0) {
         text.lineHeight = { value: data.lineHeight, unit: 'PIXELS' };
@@ -271,6 +271,35 @@ function browserAlignedTextY(data, relY) {
     const lineHeight = data.lineHeight || fontSize * 1.2;
     const figmaLeading = (lineHeight - fontSize) / 2;
     return relY + data.browserTextTopOffset - figmaLeading;
+}
+function applyBidiDirectionHints(value, direction = 'ltr') {
+    return value
+        .split('\n')
+        .map((paragraph) => applyParagraphDirectionHint(paragraph, direction))
+        .join('\n');
+}
+function applyParagraphDirectionHint(paragraph, direction) {
+    if (!paragraph || /^[\u200E\u200F\u202A-\u202E\u2066-\u2069]/.test(paragraph)) {
+        return paragraph;
+    }
+    const firstStrongDirection = firstStrongTextDirection(paragraph);
+    if (direction === 'rtl' && firstStrongDirection !== 'rtl') {
+        return '\u200F' + paragraph;
+    }
+    if (direction === 'ltr' && firstStrongDirection === 'rtl') {
+        return '\u200E' + paragraph;
+    }
+    return paragraph;
+}
+function firstStrongTextDirection(value) {
+    for (const character of Array.from(value)) {
+        if (!/\p{L}/u.test(character))
+            continue;
+        if (/[\p{Script=Arabic}\p{Script=Hebrew}]/u.test(character))
+            return 'rtl';
+        return 'ltr';
+    }
+    return null;
 }
 // ---------------------------------------------------------------------------
 // Styles / paints / effects
