@@ -5,7 +5,9 @@
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
       --force-device-scale-factor=2 --virtual-time-budget=3500 --window-size=1920,1080 \
       --screenshot=cover.png "http://localhost:8765/docs/promo.html?cover"
-  Boards: ?cover, ?states and ?result at 1920×1080 (Figma Community), ?linkedin at 1080×1350.
+  Boards: ?cover, ?states and ?result at 1920×1080 (Figma Community), ?linkedin at 1080×1350, and
+  ?window&state=ready|loading|done|error: one plugin window at 360×640 on a transparent background
+  (add --default-background-color=00000000).
   figma-import.png is a real import of examples/kitchen-sink.html made by this plugin's builder.
 -->
 <html>
@@ -28,6 +30,7 @@
       linear-gradient(160deg, #8cc49b, var(--matcha) 55%, #5b9a71);
   }
   section { position: relative; width: 100vw; height: 100vh; }
+  body:has(#window:not([hidden])) { background: none; }
 
   .eyebrow { display: flex; align-items: center; gap: 18px; font: 800 26px/1 Nunito; color: var(--sub); }
   .eyebrow img { width: 64px; border-radius: 16px; box-shadow: 0 10px 24px -10px rgba(16, 60, 36, 0.6); }
@@ -121,6 +124,10 @@
     <p class="lede" style="position: absolute; left: 0; right: 0; top: 880px; text-align: center; font-size: 30px;">Real text layers, per-side borders, gradients, shadows and vectors. No screenshot tracing.</p>
   </section>
 
+  <section id="window" hidden>
+    <div class="win" style="--s: 1; left: 0; top: 0; box-shadow: none;"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+  </section>
+
   <section id="linkedin" hidden>
     <div style="position: absolute; left: 80px; top: 84px; right: 80px; display: grid; gap: 26px;">
       <div class="eyebrow"><img src="logo.svg" alt="">New Figma plugin · Free &amp; open source</div>
@@ -138,8 +145,10 @@
   </section>
 
 <script>
-  const board = document.getElementById(location.search.slice(1) || 'cover');
+  const query = new URLSearchParams(location.search);
+  const board = document.getElementById(Array.from(query.keys())[0] || 'cover');
   board.hidden = false;
+  if (board.id === 'window') board.querySelector('.win').dataset.state = query.get('state') || 'done';
   const source = fetch('../examples/kitchen-sink.html').then(function (r) { return r.text(); });
 
   function loaded(d, html) {

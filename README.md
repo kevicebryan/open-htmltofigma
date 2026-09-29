@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.figma.com/community/plugin/1686625740123785157"><b>Get it on Figma</b></a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#using-it">Using it</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -32,7 +33,9 @@ The browser does the layout. The plugin measures the rendered page and rebuilds 
 
 ## Quick start
 
-**Needs:** [Figma desktop](https://www.figma.com/downloads/) and Node 18+
+**Install it** from the [Figma Community](https://www.figma.com/community/plugin/1686625740123785157), then run **Open HTML to Figma** from the Plugins menu in any design file.
+
+**Or build it from source.** Needs [Figma desktop](https://www.figma.com/downloads/) and Node 18+.
 
 ```bash
 git clone https://github.com/kevicebryan/open-htmltofigma.git
@@ -41,8 +44,7 @@ npm install && npm run build
 ```
 
 1. In Figma: **Plugins → Development → Import plugin from manifest…** and pick `manifest.json`
-2. Run **Open HTML to Figma**
-3. Pick a viewport, add your HTML, then **Import to Figma**
+2. Run **Open HTML to Figma**, pick a viewport, add your HTML, then **Import to Figma**
 
 ## Using it
 

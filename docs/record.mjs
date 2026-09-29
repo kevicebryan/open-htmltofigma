@@ -64,6 +64,6 @@ try {
     new URL('demo.mp4', import.meta.url).pathname]);
   console.log('wrote docs/demo.mp4');
 } finally {
-  chrome.kill();
-  rmSync(dir, { recursive: true, force: true });
+  await new Promise((r) => { chrome.once('exit', r); chrome.kill(); });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
 }
