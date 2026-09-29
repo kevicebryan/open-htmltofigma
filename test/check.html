@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Capture check</title>
+<style>
+  body { margin: 24px; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #1f2937; }
+  .ok { color: #15803d; } .bad { color: #b91c1c; font-weight: 700; }
+  iframe { width: 360px; height: 560px; border: 1px solid #e5e7eb; }
+</style>
+</head>
+<body>
+<!-- Serve the repo root (python3 -m http.server) and open /test/check.html.
+     Runs the plugin UI's real capture on examples/kitchen-sink.html and checks the tree. -->
+<pre id="out">running…</pre>
+<iframe id="ui" src="../ui.html"></iframe>
+<script>
+  const out = document.getElementById('out');
+  const results = [];
+  const check = (name, ok) => results.push((ok ? '✓ ' : '✗ ') + name);
+
+  document.getElementById('ui').onload = async function () {
+    const ui = this.contentWindow;
+    try {
+      // Pure helpers
+      const lin = ui.linearPaint('90deg, red, blue', 200, 100).gradientTransform;
+      check('linear 90deg maps left→right', Math.abs(lin[0][0] - 1) < 1e-9 && Math.abs(lin[0][2]) < 1e-9);
+      const down = ui.linearPaint('180deg, red, blue', 400, 100).gradientTransform;
+      check('linear 180deg maps top→bottom', Math.abs(down[0][1] - 1) < 1e-9 && Math.abs(down[0][0]) < 1e-9);
+      const fade = ui.gradientStops(['transparent', 'rgb(255, 0, 0)'], 100);
+      check('transparent stop keeps the neighbour hue', fade[0].color.r === 1 && fade[0].color.a === 0);
+      const clipped = ui.gradientStops(['rgb(0, 0, 0)', 'rgb(255, 255, 255) 200%'], 100);
+      check('stops past 100% are cut at the interpolated colour', Math.abs(clipped[1].color.r - 0.5) < 0.01);
+      check('whitespace collapses like CSS', ui.collapseWs('  a \n\t b  ', 'collapse').text === ' a b ');
+
+      // Full capture
+      const html = await (await fetch('../examples/kitchen-sink.html')).text();
+      const tree = await ui.captureHtmlTree(html, { width: 1440, height: 1024, runScripts: true });
+      const all = [];
+      (function walk(n, parent) { n.parent = parent; all.push(n); (n.children || []).forEach(c => walk(c, n)); })(tree, null);
+      const texts = all.filter(n => n.type === 'text');
+      const textOf = n => n.runs.map(r => r.text).join('');
+      const named = name => all.find(n => n.name === name);
+
+      check('page is the viewport width', tree.w === 1440);
+      check('70vh hero uses the 1024px viewport', Math.abs(named('header.hero').h - 716.8) < 0.5);
+      const lead = texts.find(t => textOf(t).startsWith('Paste a page'));
+      check('mixed inline paragraph is one text layer', lead && lead.runs.length >= 8);
+      check('link keeps href + underline', lead && lead.runs.some(r => r.href === 'https://example.com' && r.decoration === 'UNDERLINE'));
+      check('inline <code> padding becomes letter-spacing', lead && lead.runs.some(r => r.letterSpacing === 6));
+      check('browser line breaks recorded', lead && lead.breaks && lead.breaks.length === 2);
+      const h1 = texts.find(t => textOf(t).startsWith('Ship'));
+      check('background-clip:text → gradient text fill', h1 && h1.runs.some(r => r.fills && r.fills[0].type === 'GRADIENT_LINEAR'));
+      const nav = named('nav.nav');
+      check('border-bottom only → per-side stroke', nav && nav.stroke && nav.stroke.b === 1 && nav.stroke.t === 0);
+      check('nav (position: sticky, z-index) paints last', tree.children[0].children.slice(-1)[0] === nav);
+      check('per-corner radii', named('div.card.accent').radius.join() === '16,16,16,4');
+      check('mixed border colours → clipped vector ring', /clipPath/.test(named('div.card.accent').children.find(c => c.name === 'border').svg));
+      check('sr-only text skipped', !texts.some(t => /Screen reader/.test(textOf(t))));
+      check('::before materialised', all.some(n => n.name === '::before' && n.children.some(c => c.type === 'text' && textOf(c) === '✓')));
+      check('ol markers', ['1.', '2.', '3.'].every(m => texts.some(t => textOf(t) === m)));
+      check('input placeholder in placeholder grey', texts.some(t => textOf(t) === 'Ada Lovelace' && t.runs[0].color.r < 0.6));
+      check('select shows the chosen option', texts.some(t => textOf(t) === 'Pro — $12/mo'));
+      check('checkbox drawn as a vector', all.some(n => n.type === 'svg' && n.name === 'checkbox'));
+      check('<use> sprite icon resolved with its colour', all.some(n => n.type === 'svg' && /<rect/.test(n.svg) && /rgb\(109, 40, 217\)/.test(n.svg)));
+      check('rotate(45deg) kept as a transform', Math.abs(named('div.rot').transform.m[1] - Math.SQRT1_2) < 1e-3);
+      check('CSS triangle drawn from its borders', /polygon/.test(named('div.tri').children[0].svg));
+      check('backdrop-filter → background blur', named('div.pane').effects.some(e => e.type === 'BACKGROUND_BLUR'));
+      check('filter: blur → layer blur', named('div.blob').effects.some(e => e.type === 'LAYER_BLUR' && e.radius === 48));
+      check('page script ran', texts.some(t => textOf(t) === 'JavaScript'));
+    } catch (e) {
+      results.push('✗ threw: ' + (e && e.stack || e));
+    }
+    const failed = results.filter(r => r[0] === '✗').length;
+    out.innerHTML = results.map(r => '<span class="' + (r[0] === '✓' ? 'ok' : 'bad') + '">' + r.replace(/</g, '&lt;') + '</span>').join('\n') +
+      '\n\n' + (failed ? failed + ' FAILED' : 'ALL PASSED (' + results.length + ')');
+    document.title = failed ? 'FAIL' : 'PASS';
+  };
+</script>
+</body>
+</html>

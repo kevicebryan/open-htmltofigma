@@ -1,9 +1,10 @@
 /**
  * HTML → Figma — main thread
  *
- * Local HTML is measured in the UI iframe (browser does flex/grid/CSS layout).
- * We rebuild those boxes as nested Frames/Text with parent-relative positions
- * so the canvas matches what the HTML looked like.
+ * The UI renders the HTML in a real browser and sends a tree of boxes, text
+ * runs, paints and SVG markup measured from that render (page coordinates).
+ * This side only rebuilds it: nested Frames with parent-relative positions,
+ * rich Text, native gradients/images/vectors.
  */
 
 interface Rgba {
@@ -13,129 +14,89 @@ interface Rgba {
   a: number;
 }
 
-interface GradientStop {
-  position: number;
+type PaintSpec =
+  | { type: 'SOLID'; color: Rgba }
+  | { type: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL'; gradientTransform: Transform; gradientStops: ColorStop[] }
+  | { type: 'IMAGE'; scaleMode: 'FILL' | 'FIT'; imageRef?: string; url?: string };
+
+interface Run {
+  text: string;
+  families: string[]; // font-family stack, first = what the browser actually rendered
+  weight: number;
+  italic: boolean;
+  size: number;
+  lineHeight: number;
+  letterSpacing: number;
   color: Rgba;
+  fills?: PaintSpec[]; // background-clip: text
+  decoration?: 'UNDERLINE' | 'STRIKETHROUGH';
+  textCase?: TextCase;
+  href?: string;
 }
 
-interface LinearGradientPaint {
-  angleDeg: number;
-  stops: GradientStop[];
-}
-
-interface BoxShadowEffect {
-  type: 'DROP_SHADOW' | 'INNER_SHADOW';
-  color: Rgba;
-  offset: { x: number; y: number };
-  radius: number;
-  spread: number;
-}
-
-interface SerializedHtmlNode {
-  tag: string;
-  name: string;
+interface HtmlNode {
+  type: 'frame' | 'text' | 'svg';
+  name?: string;
   x: number;
   y: number;
-  width: number;
-  height: number;
-  opacity: number;
-  backgroundColor: Rgba | null;
-  gradient?: LinearGradientPaint | null;
-  boxShadows?: BoxShadowEffect[];
-  borderWidth: number;
-  borderColor: Rgba | null;
-  borderRadius: number;
-  overflow?: string;
-  zIndex?: number;
-  isText: boolean;
-  isImage: boolean;
-  isSvg?: boolean;
-  imageRef?: string | null;
-  text?: string;
-  fontFamily?: string;
-  fontSize?: number;
-  fontWeight?: string;
-  fontStyle?: string;
-  lineHeight?: number;
-  letterSpacing?: number;
-  textAlign?: string;
-  textColor?: Rgba | null;
-  imageSrc?: string;
-  strokeColor?: Rgba | null;
-  strokeWidth?: number;
-  children: SerializedHtmlNode[];
+  w: number;
+  h: number;
+  opacity?: number;
+  blend?: BlendMode;
+  fills?: PaintSpec[];
+  stroke?: { color: Rgba; t: number; r: number; b: number; l: number; dash?: number[] };
+  radius?: number[] | null; // tl, tr, br, bl
+  effects?: Effect[];
+  clip?: boolean;
+  transform?: { m: number[]; ox: number; oy: number }; // CSS matrix(a,b,c,d,e,f) + transform-origin
+  children?: HtmlNode[];
+  // text
+  runs?: Run[];
+  align?: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED';
+  anchor?: 'LEFT' | 'CENTER' | 'RIGHT'; // edge an auto-width line keeps when Figma's width differs
+  autoWidth?: boolean;
+  maxLines?: number;
+  breaks?: number[]; // character offsets where the browser wrapped
+  // svg
+  svg?: string;
 }
 
-type ImageMap = Record<string, string>; // id -> raw base64 PNG
+interface Ctx {
+  images: Map<string, string>; // imageRef or url -> Figma image hash
+  font: (r: Run) => FontName;
+  colors: Map<string, Rgba>;
+}
 
-// ---------------------------------------------------------------------------
-// Plugin bootstrap
-// ---------------------------------------------------------------------------
-
-figma.showUI(__html__, { width: 360, height: 520, themeColors: true });
-
-const imageHashCache: Record<string, string> = {};
-const fontFaceCache = new Map<string, FontName>();
-const fontAvailability = new Map<string, boolean>();
+figma.showUI(__html__, { width: 360, height: 560, themeColors: true });
 
 figma.ui.onmessage = async (msg: {
   type: string;
-  tree?: SerializedHtmlNode;
-  images?: ImageMap;
+  tree?: HtmlNode;
+  images?: Record<string, string>;
   viewportWidth?: number;
   asComponent?: boolean;
 }) => {
   if (msg.type !== 'convert' || !msg.tree) return;
-
   try {
-    // Fresh image hashes per import; fonts can stay cached across runs.
-    for (const key of Object.keys(imageHashCache)) delete imageHashCache[key];
-
-    // Decode raster assets once up front.
-    if (msg.images) {
-      for (const [id, b64] of Object.entries(msg.images)) {
-        try {
-          const bytes = figma.base64Decode(b64);
-          const image = figma.createImage(bytes);
-          imageHashCache[id] = image.hash;
-        } catch (e) {
-          console.warn('Failed to create image', id, e);
-        }
-      }
+    const [images, fonts] = await Promise.all([loadImages(msg.tree, msg.images || {}), loadFonts(msg.tree)]);
+    const ctx: Ctx = { images, font: fonts.get, colors: new Map() };
+    let root = build(msg.tree, null, ctx) as FrameNode | ComponentNode;
+    const suffix = msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '';
+    root.name = 'HTML Import' + suffix;
+    const center = figma.viewport.center;
+    root.x = Math.round(center.x - root.width / 2);
+    root.y = Math.round(center.y - root.height / 2);
+    figma.currentPage.appendChild(root);
+    if (msg.asComponent) {
+      root = figma.createComponentFromNode(root);
+      root.name = 'HTML Component' + suffix;
     }
-
-    const styleCollector = new Map<string, Rgba>();
-    let rootFrame = await buildNode(msg.tree, null, styleCollector);
-
-    let stylesCreated = 0;
-    if (rootFrame) {
-      stylesCreated = await createLocalColorStyles(styleCollector);
-
-      const viewport = figma.viewport.center;
-      rootFrame.name =
-        'HTML Import' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
-      rootFrame.x = viewport.x - rootFrame.width / 2;
-      rootFrame.y = viewport.y - rootFrame.height / 2;
-      figma.currentPage.appendChild(rootFrame);
-      if (msg.asComponent) {
-        rootFrame = figma.createComponentFromNode(rootFrame);
-        rootFrame.name =
-          'HTML Component' + (msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '');
-      }
-      figma.currentPage.selection = [rootFrame];
-      figma.viewport.scrollAndZoomIntoView([rootFrame]);
-
-      figma.ui.postMessage({
-        type: 'done',
-        count: countNodes(rootFrame),
-        styles: stylesCreated,
-      });
-    } else {
-      figma.ui.postMessage({ type: 'error', message: 'Nothing was created from the HTML tree.' });
-    }
+    const styles = await createLocalColorStyles(ctx.colors);
+    figma.currentPage.selection = [root];
+    figma.viewport.scrollAndZoomIntoView([root]);
+    figma.ui.postMessage({ type: 'done', count: countNodes(root), styles, missingFonts: fonts.missing });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    figma.ui.postMessage({ type: 'error', message });
+    figma.ui.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
   }
 };
 
@@ -143,192 +104,343 @@ figma.ui.onmessage = async (msg: {
 // Node building
 // ---------------------------------------------------------------------------
 
-async function buildNode(
-  data: SerializedHtmlNode,
-  parentOrigin: { x: number; y: number } | null,
-  styles: Map<string, Rgba>
-): Promise<SceneNode | null> {
-  const relX = parentOrigin ? data.x - parentOrigin.x : 0;
-  const relY = parentOrigin ? data.y - parentOrigin.y : 0;
-  const w = Math.max(data.width, 1);
-  const h = Math.max(data.height, 1);
+function build(n: HtmlNode, parent: HtmlNode | null, ctx: Ctx): SceneNode {
+  const relX = parent ? n.x - parent.x : 0;
+  const relY = parent ? n.y - parent.y : 0;
+  let node: SceneNode;
 
-  // Rasterized SVG / <img>
-  if (data.isImage) {
-    const rect = figma.createRectangle();
-    rect.name = data.name;
-    rect.resize(w, h);
-    rect.x = relX;
-    rect.y = relY;
-
-    if (data.imageRef && imageHashCache[data.imageRef]) {
-      rect.fills = [
-        {
-          type: 'IMAGE',
-          scaleMode: 'FILL',
-          imageHash: imageHashCache[data.imageRef],
-        },
-      ];
-    } else {
-      rect.fills = buildsFills(data, { r: 0.93, g: 0.9, b: 0.82, a: 1 }, styles);
+  if (n.type === 'text') {
+    const t = buildText(n, ctx);
+    const slack = t.textAutoResize === 'WIDTH_AND_HEIGHT' ? n.w - t.width : 0; // browser − Figma width
+    const anchor = n.anchor || n.align;
+    t.x = relX + (anchor === 'CENTER' ? slack / 2 : anchor === 'RIGHT' ? slack : 0);
+    t.y = relY;
+    node = t;
+  } else if (n.type === 'svg') {
+    node = buildSvg(n);
+    node.x = relX;
+    node.y = relY;
+  } else {
+    const kids = n.children || [];
+    const box = kids.length || !parent ? figma.createFrame() : figma.createRectangle();
+    if (n.name) box.name = n.name;
+    box.resize(Math.max(n.w, 0.01), Math.max(n.h, 0.01));
+    box.x = relX;
+    box.y = relY;
+    box.fills = paints(n.fills, ctx);
+    applyStroke(box, n, ctx);
+    applyRadius(box, n.radius);
+    if (box.type === 'FRAME') {
+      box.clipsContent = !!n.clip;
+      for (const child of kids) box.appendChild(build(child, n, ctx));
     }
-
-    applyOpacity(rect, data.opacity);
-    applyCornerRadius(rect, data.borderRadius);
-    applyStroke(rect, data, styles);
-    applyShadows(rect, data.boxShadows);
-    return rect;
+    node = box;
   }
 
-  // Unrasterized SVG fallback
-  if (data.isSvg) {
-    const ellipse = figma.createEllipse();
-    ellipse.name = data.name || 'svg';
-    ellipse.resize(w, h);
-    ellipse.x = relX;
-    ellipse.y = relY;
-    ellipse.fills = [];
-    const stroke = data.strokeColor || { r: 0.76, g: 0.41, b: 0.29, a: 1 };
-    trackColor(styles, stroke);
-    ellipse.strokes = [
-      {
-        type: 'SOLID',
-        color: { r: stroke.r, g: stroke.g, b: stroke.b },
-        opacity: stroke.a,
-      },
-    ];
-    ellipse.strokeWeight = Math.max(data.strokeWidth || 1.5, 1);
-    applyOpacity(ellipse, data.opacity);
-    return ellipse;
-  }
-
-  if (data.isText && data.text) {
-    return await buildTextNode(data, relX, relY, w, h, styles);
-  }
-
-  const frame = figma.createFrame();
-  frame.name = data.name;
-  frame.resize(w, h);
-  frame.x = relX;
-  frame.y = relY;
-  frame.fills = buildsFills(data, null, styles);
-  applyOpacity(frame, data.opacity);
-  applyCornerRadius(frame, data.borderRadius);
-  applyStroke(frame, data, styles);
-  applyShadows(frame, data.boxShadows);
-
-  const overflow = (data.overflow || 'visible').toLowerCase();
-  frame.clipsContent =
-    data.borderRadius > 0 ||
-    overflow === 'hidden' ||
-    overflow === 'auto' ||
-    overflow === 'scroll';
-
-  const origin = { x: data.x, y: data.y };
-  for (const child of data.children) {
-    const childNode = await buildNode(child, origin, styles);
-    if (childNode) frame.appendChild(childNode);
-  }
-
-  return frame;
+  if (n.effects && n.effects.length && 'effects' in node) setEffects(node, n.effects);
+  if (n.opacity !== undefined && n.opacity < 1) node.opacity = Math.max(0, n.opacity);
+  if (n.blend) node.blendMode = n.blend;
+  if (n.transform) applyTransform(node, n, relX, relY);
+  return node;
 }
 
-async function buildTextNode(
-  data: SerializedHtmlNode,
-  relX: number,
-  relY: number,
-  w: number,
-  h: number,
-  styles: Map<string, Rgba>
-): Promise<TextNode> {
-  const text = figma.createText();
-  text.name = data.name;
-  text.x = relX;
-  text.y = relY;
-
-  const font = await resolveFont(data.fontFamily, data.fontWeight, data.fontStyle);
-  await figma.loadFontAsync(font);
-  text.fontName = font;
-  text.characters = data.text || '';
-  text.fontSize = data.fontSize || 12;
-
-  if (data.lineHeight && data.lineHeight > 0) {
-    text.lineHeight = { value: data.lineHeight, unit: 'PIXELS' };
+function buildText(n: HtmlNode, ctx: Ctx): TextNode {
+  const t = figma.createText();
+  const runs = n.runs || [];
+  t.fontName = ctx.font(runs[0]);
+  t.characters = runs.map((r) => r.text).join('');
+  let i = 0;
+  for (const r of runs) {
+    const end = i + r.text.length;
+    if (end > i) {
+      t.setRangeFontName(i, end, ctx.font(r));
+      t.setRangeFontSize(i, end, Math.max(r.size, 1));
+      t.setRangeLineHeight(i, end, { unit: 'PIXELS', value: Math.max(r.lineHeight, 0) });
+      if (r.letterSpacing) t.setRangeLetterSpacing(i, end, { unit: 'PIXELS', value: r.letterSpacing });
+      t.setRangeFills(i, end, r.fills ? paints(r.fills, ctx) : [solid(r.color, ctx)]);
+      if (r.decoration) t.setRangeTextDecoration(i, end, r.decoration);
+      if (r.textCase) t.setRangeTextCase(i, end, r.textCase);
+      if (r.href) {
+        try {
+          t.setRangeHyperlink(i, end, { type: 'URL', value: r.href });
+        } catch (e) {
+          // not a URL Figma accepts; keep the text
+        }
+      }
+    }
+    i = end;
   }
-  if (data.letterSpacing && Math.abs(data.letterSpacing) > 0.01) {
-    text.letterSpacing = { value: data.letterSpacing, unit: 'PIXELS' };
-  }
-  text.textAlignHorizontal = mapTextAlign(data.textAlign);
-
-  if (data.textColor) {
-    trackColor(styles, data.textColor);
-    text.fills = [
-      {
-        type: 'SOLID',
-        color: { r: data.textColor.r, g: data.textColor.g, b: data.textColor.b },
-        opacity: data.textColor.a,
-      },
-    ];
-  }
-
-  try {
-    // Preserve the browser's measured text box. Figma's font metrics can
-    // otherwise reflow the text even when its width is the same.
-    text.textAutoResize = 'NONE';
-    text.resize(Math.max(w, 1), Math.max(h, data.fontSize || 12));
-  } catch {
-    try {
-      text.textAutoResize = 'HEIGHT';
-      text.resize(Math.max(w, 1), 0.01);
-    } catch {
-      // keep default
+  t.textAlignHorizontal = n.align || 'LEFT';
+  if (n.autoWidth) {
+    t.textAutoResize = 'WIDTH_AND_HEIGHT';
+  } else {
+    t.resize(Math.max(n.w, 1), Math.max(n.h, 1));
+    t.textAutoResize = 'HEIGHT';
+    const line = Math.min(...runs.map((r) => r.lineHeight)) || 1;
+    if (n.breaks && n.breaks.length && n.align !== 'JUSTIFIED' && Math.abs(t.height - n.h) > line / 2) {
+      // Figma's copy of the font wraps differently: keep the browser's lines (soft breaks).
+      for (const at of n.breaks.slice().sort((a, b) => b - a)) {
+        let pos = Math.min(at, t.characters.length);
+        if (t.characters[pos - 1] === ' ') {
+          t.deleteCharacters(pos - 1, pos); // the space the browser wrapped at
+          pos--;
+        }
+        t.insertCharacters(pos, '\u2028', pos > 0 ? 'BEFORE' : 'AFTER');
+      }
+      t.textAutoResize = 'WIDTH_AND_HEIGHT';
     }
   }
+  if (n.maxLines) {
+    t.textTruncation = 'ENDING';
+    t.maxLines = n.maxLines;
+  }
+  return t;
+}
 
-  applyOpacity(text, data.opacity);
-  return text;
+function buildSvg(n: HtmlNode): FrameNode {
+  let f: FrameNode;
+  try {
+    f = figma.createNodeFromSvg(n.svg || '');
+  } catch (e) {
+    f = figma.createFrame();
+    f.fills = [];
+    f.name = 'svg (could not import)';
+  }
+  if (n.name) f.name = n.name;
+  f.resize(Math.max(n.w, 0.01), Math.max(n.h, 0.01));
+  f.clipsContent = !!n.clip;
+  return f;
+}
+
+/** CSS transform (rotation + uniform scale) around transform-origin. */
+function applyTransform(node: SceneNode, n: HtmlNode, relX: number, relY: number): void {
+  const [a, b, c, d, e, f] = n.transform!.m;
+  const s = Math.hypot(a, b);
+  if (Math.abs(s - 1) > 0.001 && 'rescale' in node) node.rescale(s);
+  const ra = a / s, rb = b / s, rc = c / s, rd = d / s;
+  const { ox, oy } = n.transform!;
+  node.relativeTransform = [
+    [ra, rc, relX + ox - s * (ra * ox + rc * oy) + e],
+    [rb, rd, relY + oy - s * (rb * ox + rd * oy) + f],
+  ];
 }
 
 // ---------------------------------------------------------------------------
-// Styles / paints / effects
+// Paints / strokes / effects
+// ---------------------------------------------------------------------------
+
+function solid(c: Rgba, ctx: Ctx): SolidPaint {
+  trackColor(ctx.colors, c);
+  return { type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a };
+}
+
+function paints(specs: PaintSpec[] | undefined, ctx: Ctx): Paint[] {
+  const out: Paint[] = [];
+  for (const p of specs || []) {
+    if (p.type === 'SOLID') out.push(solid(p.color, ctx));
+    else if (p.type === 'IMAGE') {
+      const hash = ctx.images.get(p.imageRef || p.url || '');
+      if (hash) out.push({ type: 'IMAGE', scaleMode: p.scaleMode, imageHash: hash });
+    } else out.push(p);
+  }
+  return out;
+}
+
+function applyStroke(node: FrameNode | RectangleNode, n: HtmlNode, ctx: Ctx): void {
+  const s = n.stroke;
+  if (!s) return;
+  node.strokes = [solid(s.color, ctx)];
+  node.strokeAlign = 'INSIDE';
+  if (s.t === s.r && s.r === s.b && s.b === s.l) node.strokeWeight = s.t;
+  else {
+    node.strokeTopWeight = s.t;
+    node.strokeRightWeight = s.r;
+    node.strokeBottomWeight = s.b;
+    node.strokeLeftWeight = s.l;
+  }
+  if (s.dash) node.dashPattern = s.dash;
+}
+
+function applyRadius(node: FrameNode | RectangleNode, r: number[] | null | undefined): void {
+  if (!r) return;
+  if (r[0] === r[1] && r[1] === r[2] && r[2] === r[3]) node.cornerRadius = r[0];
+  else {
+    node.topLeftRadius = r[0];
+    node.topRightRadius = r[1];
+    node.bottomRightRadius = r[2];
+    node.bottomLeftRadius = r[3];
+  }
+}
+
+function setEffects(node: SceneNode & BlendMixin, effects: Effect[]): void {
+  try {
+    node.effects = effects;
+  } catch (e) {
+    // Figma only accepts shadow spread on filled, clipping frames; drop it elsewhere.
+    node.effects = effects.map((fx) =>
+      fx.type === 'DROP_SHADOW' || fx.type === 'INNER_SHADOW' ? Object.assign({}, fx, { spread: 0 }) : fx
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Images / fonts (resolved once, up front)
+// ---------------------------------------------------------------------------
+
+function walk(n: HtmlNode, fn: (n: HtmlNode) => void): void {
+  fn(n);
+  for (const c of n.children || []) walk(c, fn);
+}
+
+async function loadImages(tree: HtmlNode, b64: Record<string, string>): Promise<Map<string, string>> {
+  const hashes = new Map<string, string>();
+  for (const id of Object.keys(b64)) {
+    try {
+      hashes.set(id, figma.createImage(figma.base64Decode(b64[id])).hash);
+    } catch (e) {
+      console.warn('Failed to create image', id, e);
+    }
+  }
+  // Images the UI couldn't read (no CORS): let Figma fetch them itself.
+  const urls = new Set<string>();
+  walk(tree, (n) => {
+    const all = (n.fills || []).concat(...(n.runs || []).map((r) => r.fills || []));
+    for (const p of all) if (p.type === 'IMAGE' && p.url) urls.add(p.url);
+  });
+  await Promise.all(
+    Array.from(urls).map((url) =>
+      figma
+        .createImageAsync(url)
+        .then((img) => hashes.set(url, img.hash))
+        .catch(() => console.warn('Could not fetch image', url))
+    )
+  );
+  return hashes;
+}
+
+const INTER: FontName = { family: 'Inter', style: 'Regular' };
+let fontIndex: Map<string, FontName[]> | null = null;
+
+// Generic / system families → what to look for in Figma, in order.
+const SYSTEM_SANS = ['SF Pro', 'SF Pro Text', 'Inter'];
+const FONT_ALIASES: Record<string, string[]> = {
+  'system-ui': SYSTEM_SANS,
+  '-apple-system': SYSTEM_SANS,
+  blinkmacsystemfont: SYSTEM_SANS,
+  'ui-sans-serif': SYSTEM_SANS,
+  'sans-serif': ['Helvetica', 'Arial', 'Inter'],
+  serif: ['Times New Roman', 'Times', 'Georgia', 'Noto Serif'],
+  'ui-serif': ['New York', 'Times New Roman', 'Georgia'],
+  monospace: ['Menlo', 'Courier New', 'Roboto Mono'],
+  'ui-monospace': ['SF Mono', 'Menlo', 'Roboto Mono'],
+  sfmono: ['SF Mono', 'Menlo', 'Roboto Mono'],
+  'sfmono-regular': ['SF Mono', 'Menlo', 'Roboto Mono'],
+  cursive: ['Comic Sans MS'],
+};
+const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|-apple-system|blinkmacsystemfont|emoji|math)$/i;
+const EMOJI = /emoji|symbol/i;
+
+async function loadFonts(tree: HtmlNode): Promise<{ get: (r: Run) => FontName; missing: string[] }> {
+  if (!fontIndex) {
+    fontIndex = new Map();
+    for (const f of await figma.listAvailableFontsAsync()) {
+      const key = f.fontName.family.toLowerCase();
+      const list = fontIndex.get(key);
+      if (list) list.push(f.fontName);
+      else fontIndex.set(key, [f.fontName]);
+    }
+  }
+  const index = fontIndex;
+  const runKey = (r: Run) => r.families.join(',') + '|' + r.weight + '|' + r.italic;
+  const chosen = new Map<string, FontName>();
+  const missing = new Set<string>();
+  walk(tree, (n) => {
+    for (const r of n.runs || []) {
+      const key = runKey(r);
+      if (chosen.has(key)) continue;
+      let styles: FontName[] | undefined;
+      for (const fam of r.families) {
+        if (EMOJI.test(fam)) continue;
+        for (const cand of FONT_ALIASES[fam.toLowerCase()] || [fam]) {
+          styles = index.get(cand.toLowerCase());
+          if (styles) break;
+        }
+        if (styles) break;
+        if (!GENERIC.test(fam)) missing.add(fam);
+      }
+      chosen.set(key, pickStyle(styles || index.get('inter') || [INTER], r.weight, r.italic));
+    }
+  });
+  const failed = new Set<string>();
+  const unique = new Map<string, FontName>();
+  chosen.forEach((f) => unique.set(f.family + '::' + f.style, f));
+  unique.set('Inter::Regular', INTER);
+  await Promise.all(
+    Array.from(unique.entries()).map(([k, f]) => figma.loadFontAsync(f).catch(() => failed.add(k)))
+  );
+  return {
+    get: (r) => {
+      const f = r && chosen.get(runKey(r));
+      return f && !failed.has(f.family + '::' + f.style) ? f : INTER;
+    },
+    missing: Array.from(missing),
+  };
+}
+
+function styleWeight(style: string): number {
+  const s = style.toLowerCase().replace(/[\s_-]/g, '');
+  if (/thin|hairline/.test(s)) return 100;
+  if (/(extra|ultra)light/.test(s)) return 200;
+  if (/light/.test(s)) return 300;
+  if (/medium/.test(s)) return 500;
+  if (/(semi|demi)bold/.test(s)) return 600;
+  if (/(extra|ultra)bold/.test(s)) return 800;
+  if (/black|heavy/.test(s)) return 900;
+  if (/bold/.test(s)) return 700;
+  return 400;
+}
+
+/** Closest weight, matching italic; plain styles beat Condensed/Display/etc. */
+function pickStyle(styles: FontName[], weight: number, italic: boolean): FontName {
+  let best = styles[0];
+  let bestScore = Infinity;
+  for (const f of styles) {
+    const isItalic = /italic|oblique/i.test(f.style);
+    const extra = f.style
+      .replace(/italic|oblique|regular|normal|book|roman|thin|hairline|extra|ultra|semi|demi|light|medium|bold|black|heavy/gi, '')
+      .trim();
+    const score =
+      Math.abs(styleWeight(f.style) - weight) + (isItalic !== italic ? 1000 : 0) + (extra ? 50 : 0);
+    if (score < bestScore) {
+      best = f;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Local color styles
 // ---------------------------------------------------------------------------
 
 function trackColor(styles: Map<string, Rgba>, c: Rgba): void {
   if (c.a < 0.05) return;
-  const key = [
-    Math.round(c.r * 255),
-    Math.round(c.g * 255),
-    Math.round(c.b * 255),
-    Math.round(c.a * 100),
-  ].join(',');
+  const key = [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255), Math.round(c.a * 100)].join(',');
   if (!styles.has(key)) styles.set(key, c);
 }
 
 async function createLocalColorStyles(styles: Map<string, Rgba>): Promise<number> {
+  const existing = new Set((await figma.getLocalPaintStylesAsync()).map((s) => s.name));
   let created = 0;
   // Cap so imports don't flood the file with hundreds of near-duplicate styles.
-  const entries = Array.from(styles.entries()).slice(0, 40);
-  for (const [, c] of entries) {
-    const name =
-      'HTML/' +
-      rgbToHex(c) +
-      (c.a < 0.999 ? ` @${Math.round(c.a * 100)}%` : '');
-    try {
-      const existing = figma.getLocalPaintStyles().find((s) => s.name === name);
-      if (existing) continue;
-      const style = figma.createPaintStyle();
-      style.name = name;
-      style.paints = [
-        {
-          type: 'SOLID',
-          color: { r: c.r, g: c.g, b: c.b },
-          opacity: c.a,
-        },
-      ];
-      created++;
-    } catch {
-      // ignore
-    }
+  for (const c of Array.from(styles.values()).slice(0, 40)) {
+    const name = 'HTML/' + rgbToHex(c) + (c.a < 0.999 ? ` @${Math.round(c.a * 100)}%` : '');
+    if (existing.has(name)) continue;
+    const style = figma.createPaintStyle();
+    style.name = name;
+    style.paints = [{ type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a }];
+    existing.add(name);
+    created++;
   }
   return created;
 }
@@ -341,219 +453,8 @@ function rgbToHex(c: Rgba): string {
   return ('#' + h(c.r) + h(c.g) + h(c.b)).toUpperCase();
 }
 
-function buildsFills(
-  data: SerializedHtmlNode,
-  fallback: Rgba | null,
-  styles: Map<string, Rgba>
-): Paint[] {
-  if (data.gradient && data.gradient.stops && data.gradient.stops.length >= 2) {
-    for (const s of data.gradient.stops) trackColor(styles, s.color);
-    return [toLinearGradientPaint(data.gradient)];
-  }
-  if (data.backgroundColor) {
-    trackColor(styles, data.backgroundColor);
-    return [
-      {
-        type: 'SOLID',
-        color: {
-          r: data.backgroundColor.r,
-          g: data.backgroundColor.g,
-          b: data.backgroundColor.b,
-        },
-        opacity: data.backgroundColor.a,
-      },
-    ];
-  }
-  if (fallback) {
-    trackColor(styles, fallback);
-    return [
-      {
-        type: 'SOLID',
-        color: { r: fallback.r, g: fallback.g, b: fallback.b },
-        opacity: fallback.a,
-      },
-    ];
-  }
-  return [];
-}
-
-function toLinearGradientPaint(gradient: LinearGradientPaint): GradientPaint {
-  const stops: ColorStop[] = gradient.stops.map((s) => ({
-    position: clamp01(s.position),
-    color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
-  }));
-  const rad = ((gradient.angleDeg - 90) * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const gradientTransform: Transform = [
-    [cos, sin, 0.5 - 0.5 * cos - 0.5 * sin],
-    [-sin, cos, 0.5 + 0.5 * sin - 0.5 * cos],
-  ];
-  return { type: 'GRADIENT_LINEAR', gradientStops: stops, gradientTransform };
-}
-
-function applyShadows(node: BlendMixin, shadows: BoxShadowEffect[] | undefined): void {
-  if (!shadows || shadows.length === 0) return;
-  node.effects = shadows.map((shadow) => ({
-    type: shadow.type,
-    color: {
-      r: shadow.color.r,
-      g: shadow.color.g,
-      b: shadow.color.b,
-      a: shadow.color.a,
-    },
-    offset: shadow.offset,
-    radius: shadow.radius,
-    spread: shadow.spread,
-    visible: true,
-    blendMode: 'NORMAL' as const,
-  }));
-}
-
-function clamp01(n: number): number {
-  if (n < 0) return 0;
-  if (n > 1) return 1;
-  return n;
-}
-
-function applyOpacity(node: BlendMixin, opacity: number): void {
-  if (opacity < 1 && opacity >= 0) node.opacity = opacity;
-}
-
-function applyCornerRadius(
-  node: RectangleNode | FrameNode | EllipseNode | ComponentNode | InstanceNode,
-  radius: number
-): void {
-  if (radius > 0 && 'cornerRadius' in node) {
-    (node as RectangleNode | FrameNode).cornerRadius = radius;
-  }
-}
-
-function applyStroke(
-  node: GeometryMixin & MinimalStrokesMixin,
-  data: SerializedHtmlNode,
-  styles: Map<string, Rgba>
-): void {
-  if (data.borderWidth > 0 && data.borderColor) {
-    trackColor(styles, data.borderColor);
-    node.strokes = [
-      {
-        type: 'SOLID',
-        color: {
-          r: data.borderColor.r,
-          g: data.borderColor.g,
-          b: data.borderColor.b,
-        },
-        opacity: data.borderColor.a,
-      },
-    ];
-    node.strokeWeight = data.borderWidth;
-    node.strokeAlign = 'INSIDE';
-  }
-}
-
-function mapTextAlign(align: string | undefined): 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED' {
-  switch ((align || 'left').toLowerCase()) {
-    case 'center':
-      return 'CENTER';
-    case 'right':
-    case 'end':
-      return 'RIGHT';
-    case 'justify':
-      return 'JUSTIFIED';
-    default:
-      return 'LEFT';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Fonts
-// ---------------------------------------------------------------------------
-
-function weightToStyle(weight: string | undefined, fontStyle: string | undefined): string {
-  const italic = (fontStyle || '').toLowerCase() === 'italic';
-  const w = parseInt(weight || '400', 10);
-  let base = 'Regular';
-  if (w >= 800) base = 'Black';
-  else if (w >= 700) base = 'Bold';
-  else if (w >= 600) base = 'Semi Bold';
-  else if (w >= 500) base = 'Medium';
-  else if (w <= 300) base = 'Light';
-  if (!italic) return base;
-  if (base === 'Regular') return 'Italic';
-  return base + ' Italic';
-}
-
-function familyFallbacks(family: string): string[] {
-  const f = family.trim();
-  const lower = f.toLowerCase();
-  const serifLike =
-    /playfair|serif|georgia|times|garamond|merriweather/.test(lower);
-  const list: string[] = [f];
-  if (serifLike) {
-    list.push('Playfair Display', 'Noto Serif', 'Georgia', 'Times New Roman', 'IBM Plex Serif');
-  } else {
-    list.push('Figtree', 'Inter', 'Roboto', 'Helvetica');
-  }
-  list.push('Inter');
-  return list;
-}
-
-async function tryLoadFont(font: FontName): Promise<boolean> {
-  const key = font.family + '::' + font.style;
-  const cached = fontAvailability.get(key);
-  if (cached !== undefined) return cached;
-  try {
-    await figma.loadFontAsync(font);
-    fontAvailability.set(key, true);
-    return true;
-  } catch {
-    fontAvailability.set(key, false);
-    return false;
-  }
-}
-
-async function resolveFont(
-  family: string | undefined,
-  weight: string | undefined,
-  fontStyle?: string
-): Promise<FontName> {
-  const cacheKey = (family || 'Inter') + '|' + (weight || '400') + '|' + (fontStyle || 'normal');
-  const cached = fontFaceCache.get(cacheKey);
-  if (cached) return cached;
-
-  const style = weightToStyle(weight, fontStyle);
-  // Google Fonts style names are inconsistent about the space in compound
-  // weights ("Semi Bold" vs "SemiBold") depending on the family — try both
-  // before giving up on the weight and falling back to Regular.
-  const noSpace = style.replace(/ /g, '');
-  const styleFallbacks =
-    style.indexOf('Italic') >= 0
-      ? [style, noSpace, 'Italic', style.replace(' Italic', ''), noSpace.replace('Italic', ''), 'Regular']
-      : [style, noSpace, 'Regular'];
-  const seen = new Set<string>();
-  for (const fam of familyFallbacks(family || 'Inter')) {
-    for (const st of styleFallbacks) {
-      const key = fam + '::' + st;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const font: FontName = { family: fam, style: st };
-      if (await tryLoadFont(font)) {
-        fontFaceCache.set(cacheKey, font);
-        return font;
-      }
-    }
-  }
-  const fallback: FontName = { family: 'Inter', style: 'Regular' };
-  await figma.loadFontAsync(fallback);
-  fontFaceCache.set(cacheKey, fallback);
-  return fallback;
-}
-
 function countNodes(node: BaseNode): number {
   let n = 1;
-  if ('children' in node) {
-    for (const child of (node as ChildrenMixin).children) n += countNodes(child);
-  }
+  if ('children' in node) for (const child of node.children) n += countNodes(child);
   return n;
 }

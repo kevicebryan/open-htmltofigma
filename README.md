@@ -35,14 +35,19 @@ npm install && npm run build
 
 | HTML | Figma |
 |------|--------|
-| Structure, flex/grid layout | Nested Frames at measured positions |
-| Colors, linear gradients, borders, shadows | Fills / strokes / effects |
-| Text | Editable Text layers |
-| SVG / images / complex backgrounds | Image fills (raster when needed) |
+| Flex / grid / absolute layout, `vh` units | Nested Frames at the measured positions (1440×1024 viewport on Desktop) |
+| Paragraphs with `<b>`, `<i>`, links, inline `<code>` | One editable rich-text layer each, same line breaks as the browser |
+| Solid, linear, radial and `background-clip: text` gradients | Native fills |
+| Per-side borders, per-corner radii, shadows, rings, `blur()`, `backdrop-filter` | Strokes / corner radii / effects |
+| Inline SVG, `<use>` sprites, `<img src="*.svg">` | Vector layers |
+| Images, `background-image`, `<canvas>` charts | Image fills cropped like `object-fit` / `background-size` |
+| `::before` / `::after`, list markers, form controls, `rotate()` | Matching layers |
 
-**Closer match:** full document + inline CSS, install page fonts in Figma, same viewport you’d design at. Try [`examples/`](examples/).
+**Closer match:** use the same viewport you'd design at, and have the page's fonts in Figma (fonts it can't find are listed after the import). Try [`examples/`](examples/).
 
-**JS-rendered pages** (content built by an inline `<script>`, not present in the raw HTML): tick **Execute page scripts** before importing. Off by default — only enable it for HTML you trust, since it lets the page’s own script run.
+**Local CSS / images / fonts:** pick the HTML together with its files, or use **pick its folder**, so relative `href`/`src`/`url()` references resolve.
+
+**JS-rendered pages** (Tailwind Play CDN, content built by a `<script>`): tick **Execute page scripts**. Scroll-reveal and entrance animations are settled before measuring. Off by default; only enable it for HTML you trust, since it lets the page's own script run.
 
 ## How it works
 
@@ -52,9 +57,11 @@ HTML → isolated browser layout → measure DOM → Frames / Text / images in F
 
 Absolute positions from real layout (not Auto Layout rewrite). That’s intentional for visual parity.
 
+**Check:** `python3 -m http.server`, then open `http://localhost:8000/test/check.html` to run the capture on `examples/kitchen-sink.html` and assert the tree.
+
 ## Limits
 
-Font substitution if faces aren’t in Figma; filters/transforms/masks/animations; CORS images; mixed inline text styles. Unsupported looks fall back to a local raster instead of disappearing.
+Missing fonts are substituted, and Figma's copy of a font can be a little wider or narrower than the web version (optical sizes); line breaks are kept either way. Skew, 3D transforms, `clip-path` and masks keep the measured box, not the effect. Conic/repeating gradients and HTML inside SVG become images. Cross-origin iframes are placeholders.
 
 ## License
 

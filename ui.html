@@ -65,6 +65,16 @@
       color: var(--muted);
     }
 
+    .field-label .link {
+      margin-left: 4px;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--accent);
+      font: inherit;
+      cursor: pointer;
+    }
+
     .option {
       display: flex;
       align-items: center;
@@ -361,10 +371,10 @@
   <div class="field">
     <span class="field-label">Viewport</span>
     <div class="segment" id="viewports">
-      <button type="button" data-w="1440" class="active">Desktop</button>
-      <button type="button" data-w="1280">Laptop</button>
-      <button type="button" data-w="768">Tablet</button>
-      <button type="button" data-w="390">Mobile</button>
+      <button type="button" data-w="1440" data-h="1024" class="active">Desktop</button>
+      <button type="button" data-w="1280" data-h="832">Laptop</button>
+      <button type="button" data-w="768" data-h="1024">Tablet</button>
+      <button type="button" data-w="390" data-h="844">Mobile</button>
     </div>
   </div>
 
@@ -383,9 +393,9 @@
   </div>
 
   <div class="field">
-    <span class="field-label">File</span>
+    <span class="field-label">File <button type="button" class="link" id="pick-folder">or pick its folder</button></span>
     <label class="file-zone" id="file-zone" for="file">
-      <input id="file" type="file" accept=".html,.htm,text/html" />
+      <input id="file" type="file" multiple accept=".html,.htm,text/html,.css,.js,.svg,image/*,.woff,.woff2,.ttf,.otf" />
       <div class="file-icon">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M3.5 2.5h6l3 3V13.5h-9v-11z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
@@ -394,9 +404,10 @@
       </div>
       <div class="file-meta">
         <div class="title" id="file-title">Choose HTML file</div>
-        <div class="desc" id="file-desc">.html or .htm</div>
+        <div class="desc" id="file-desc">.html, plus its CSS / images if local</div>
       </div>
     </label>
+    <input id="folder" type="file" webkitdirectory hidden />
   </div>
 
   <div class="divider">or paste</div>
@@ -419,6 +430,7 @@
   <!-- Isolated browser document used for layout measurement. -->
   <div id="render-host" aria-hidden="true"></div>
 
+
   <script>
     const fileInput = document.getElementById('file');
     const fileZone = document.getElementById('file-zone');
@@ -432,17 +444,19 @@
     const viewportBtns = document.querySelectorAll('#viewports button');
     const asComponentInput = document.getElementById('as-component');
     const runScriptsInput = document.getElementById('run-scripts');
+    const folderInput = document.getElementById('folder');
+    let assetFiles = []; // local CSS / JS / images / fonts picked with the page
 
-    let viewportWidth = 1440;
+    let viewport = { w: 1440, h: 1024 };
     let isImporting = false;
     let importTimeout = null;
-    const imageStore = {}; // id -> raw base64 PNG (no data: prefix)
+    let scriptsSkipped = false;
 
     viewportBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
         viewportBtns.forEach(function (b) { b.classList.remove('active'); });
         btn.classList.add('active');
-        viewportWidth = parseInt(btn.getAttribute('data-w'), 10);
+        viewport = { w: parseInt(btn.getAttribute('data-w'), 10), h: parseInt(btn.getAttribute('data-h'), 10) };
       });
     });
 
@@ -471,9 +485,11 @@
 
     function resetFilePicker() {
       fileInput.value = '';
+      folderInput.value = '';
+      assetFiles = [];
       fileZone.classList.remove('has-file');
       fileTitle.textContent = 'Choose HTML file';
-      fileDesc.textContent = '.html or .htm';
+      fileDesc.textContent = '.html, plus its CSS / images if local';
     }
 
     function withTimeout(promise, ms, label) {
@@ -487,78 +503,243 @@
       ]);
     }
 
-    fileInput.addEventListener('change', async function () {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-      if (!isHtmlFile(file)) {
+    /** The page is the (shallowest, preferably index) HTML file; the rest are its assets. */
+    async function loadPicked(files) {
+      const list = Array.prototype.slice.call(files || []);
+      if (!list.length) return;
+      const path = function (f) { return f.webkitRelativePath || f.name; };
+      const page = list.filter(isHtmlFile).sort(function (a, b) {
+        return /(^|\/)index\.html?$/i.test(path(b)) - /(^|\/)index\.html?$/i.test(path(a)) ||
+          path(a).split('/').length - path(b).split('/').length;
+      })[0];
+      if (!page) {
         resetFilePicker();
-        setStatus('Choose an HTML file (.html or .htm). "' + file.name + '" is not supported.', 'error');
+        setStatus('Choose an HTML file (.html or .htm). "' + list[0].name + '" is not supported.', 'error');
         return;
       }
       try {
-        htmlInput.value = await file.text();
+        htmlInput.value = await page.text();
+        assetFiles = list.filter(function (f) { return f !== page; });
         fileZone.classList.add('has-file');
-        fileTitle.textContent = file.name;
-        fileDesc.textContent = Math.max(1, Math.round(file.size / 1024)) + ' KB loaded';
+        fileTitle.textContent = page.name;
+        fileDesc.textContent = Math.max(1, Math.round(page.size / 1024)) + ' KB loaded' +
+          (assetFiles.length ? ' · ' + assetFiles.length + ' local asset' + (assetFiles.length > 1 ? 's' : '') : '');
         setStatus('File loaded — ready to import');
       } catch (err) {
         resetFilePicker();
         setStatus('Failed to read file: ' + err.message, 'error');
       }
-    });
+    }
 
-    // -------------------------------------------------------------------------
-    // Colors / shadows / gradients
-    // -------------------------------------------------------------------------
+    fileInput.addEventListener('change', function () { loadPicked(fileInput.files); });
+    folderInput.addEventListener('change', function () { loadPicked(folderInput.files); });
+    document.getElementById('pick-folder').addEventListener('click', function () { folderInput.click(); });
 
-    function parseCssColor(css) {
-      if (!css || css === 'transparent' || css === 'none') return null;
-      const raw = String(css).trim();
-      if (!raw || raw === 'rgba(0, 0, 0, 0)' || raw === 'rgb(0 0 0 / 0)') return null;
+    async function replaceAsync(str, re, fn) {
+      const parts = [];
+      let last = 0, m;
+      re.lastIndex = 0;
+      while ((m = re.exec(str))) {
+        parts.push(str.slice(last, m.index), fn.apply(null, m));
+        last = m.index + m[0].length;
+      }
+      parts.push(str.slice(last));
+      return (await Promise.all(parts)).join('');
+    }
 
-      const fromHexOrRgb = parseHexOrRgb(raw);
-      if (fromHexOrRgb) return fromHexOrRgb.a === 0 ? null : fromHexOrRgb;
-
-      // color(srgb r g b [/ a]) — channels are 0–1
-      const srgb = raw.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i);
-      if (srgb) {
-        let a = 1;
-        if (srgb[4] !== undefined) {
-          a = String(srgb[4]).indexOf('%') >= 0 ? parseFloat(srgb[4]) / 100 : parseFloat(srgb[4]);
+    /** Relative refs (style.css, img/hero.jpg, fonts) → inline / data: URLs from the picked files,
+     *  since the page renders from a string and has no folder to resolve them against. */
+    async function inlineAssets(html, files) {
+      if (!files.length) return html;
+      const entries = files.map(function (f) { return { f: f, path: (f.webkitRelativePath || f.name).toLowerCase() }; });
+      const find = function (ref) {
+        if (!ref || /^(https?:|data:|blob:|mailto:|#|\/\/)/i.test(ref.trim())) return null;
+        let p;
+        try { p = decodeURIComponent(ref.trim().split(/[?#]/)[0]); } catch (e) { p = ref.trim(); }
+        p = p.toLowerCase().replace(/^(\.\.?\/)+|^\//g, '');
+        const base = p.split('/').pop();
+        const hit = entries.find(function (e) { return e.path === p || e.path.endsWith('/' + p); }) ||
+          entries.find(function (e) { return e.path.split('/').pop() === base; }); // ponytail: basename fallback
+        return hit ? hit.f : null;
+      };
+      const cache = new Map();
+      const dataUrl = function (f) {
+        if (!cache.has(f)) cache.set(f, new Promise(function (resolve) {
+          const reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.readAsDataURL(f);
+        }));
+        return cache.get(f);
+      };
+      const css = function (text) {
+        return replaceAsync(text, /url\(\s*(['"]?)([^'")]+)\1\s*\)/g, async function (m, q, ref) {
+          const f = find(ref);
+          return f ? 'url("' + await dataUrl(f) + '")' : m;
+        });
+      };
+      const d = new DOMParser().parseFromString(html, 'text/html');
+      const all = function (sel) { return Array.prototype.slice.call(d.querySelectorAll(sel)); };
+      for (const link of all('link[rel~="stylesheet"][href]')) {
+        const f = find(link.getAttribute('href'));
+        if (!f) continue;
+        const style = d.createElement('style');
+        style.textContent = await css(await f.text()); // ponytail: @import inside it isn't followed
+        link.replaceWith(style);
+      }
+      for (const el of all('style')) el.textContent = await css(el.textContent);
+      for (const el of all('[style]')) el.setAttribute('style', await css(el.getAttribute('style')));
+      for (const el of all('script[src]')) {
+        const f = find(el.getAttribute('src'));
+        if (f) { el.removeAttribute('src'); el.textContent = await f.text(); }
+      }
+      for (const el of all('[src], [poster], object[data]')) {
+        for (const a of ['src', 'poster', 'data']) {
+          const f = el.hasAttribute(a) && find(el.getAttribute(a));
+          if (f) el.setAttribute(a, await dataUrl(f));
         }
-        if (a === 0) return null;
-        return {
-          r: clamp01(parseFloat(srgb[1])),
-          g: clamp01(parseFloat(srgb[2])),
-          b: clamp01(parseFloat(srgb[3])),
-          a: a
-        };
       }
+      for (const el of all('[srcset]')) {
+        const f = find(el.getAttribute('srcset').trim().split(/\s+/)[0]);
+        if (f) el.setAttribute('srcset', await dataUrl(f));
+      }
+      return (d.doctype ? '<!DOCTYPE html>\n' : '') + d.documentElement.outerHTML;
+    }
 
-      // lab()/oklch()/hsl(): let the canvas engine normalize to hex/rgba
-      try {
-        const canvas = parseCssColor._canvas || (parseCssColor._canvas = document.createElement('canvas'));
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        const sentinel = '#abcdef';
-        ctx.fillStyle = sentinel;
-        ctx.fillStyle = raw;
-        const normalized = String(ctx.fillStyle);
-        if (!normalized || normalized.toLowerCase() === sentinel) return null;
-        const parsed = parseHexOrRgb(normalized);
-        if (!parsed || parsed.a === 0) return null;
-        return parsed;
-      } catch (e) {
-        return null;
+    // =========================================================================
+    // Capture: render the HTML in an isolated iframe and measure what the
+    // browser actually drew. Geometry is in page px; paints are Figma-ready.
+    // =========================================================================
+
+    let doc = null;             // render iframe document / window (one import at a time)
+    let win = null;
+    let imageStore = {};        // id -> raw base64 PNG/JPEG
+    let imageSeq = 0;
+    let imageLoads = new Map(); // url -> Promise<HTMLImageElement | null>
+    let fontCheck = new Map();  // family -> did the browser have it?
+    let fontProbe = null;
+    let bodyBgOnCanvas = false; // body background is painted by the root frame
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
+    const BLACK = { r: 0, g: 0, b: 0, a: 1 };
+    const ACCENT = { r: 0, g: 0.459, b: 1, a: 1 }; // Chrome's default accent-color
+    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'HEAD', 'TITLE', 'TEMPLATE',
+      'BR', 'WBR', 'SOURCE', 'TRACK', 'PARAM', 'MAP', 'AREA', 'DATALIST', 'OPTION', 'OPTGROUP']);
+    // Drawn from their own pixels / value; children are not walked.
+    const REPLACED = new Set(['IMG', 'SVG', 'VIDEO', 'CANVAS', 'IFRAME', 'EMBED', 'OBJECT', 'AUDIO',
+      'INPUT', 'SELECT', 'TEXTAREA', 'PROGRESS', 'METER']);
+
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function px(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+    function rectOf(r) { return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+
+    function boundsOf(rects) {
+      let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+      Array.prototype.forEach.call(rects, function (q) {
+        l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+      });
+      return l === Infinity ? { x: 0, y: 0, w: 0, h: 0 } : { x: l, y: t, w: r - l, h: b - t };
+    }
+
+    function contentBox(el, cs) {
+      const r = el.getBoundingClientRect();
+      const l = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+      const t = px(cs.borderTopWidth) + px(cs.paddingTop);
+      return {
+        x: r.left + l,
+        y: r.top + t,
+        w: r.width - l - px(cs.borderRightWidth) - px(cs.paddingRight),
+        h: r.height - t - px(cs.borderBottomWidth) - px(cs.paddingBottom)
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // CSS value parsing
+    // -------------------------------------------------------------------------
+
+    /** Split on `sep` outside parentheses and quotes (sep ' ' = any whitespace). */
+    function splitTopLevel(str, sep) {
+      const out = [];
+      let cur = '', depth = 0, quote = '';
+      for (const ch of String(str || '')) {
+        if (quote) { if (ch === quote) quote = ''; }
+        else if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (depth === 0 && (sep === ' ' ? /\s/.test(ch) : ch === sep)) {
+          if (cur.trim()) out.push(cur.trim());
+          cur = '';
+          continue;
+        }
+        cur += ch;
       }
+      if (cur.trim()) out.push(cur.trim());
+      return out;
+    }
+
+    /** Top-level function calls: "blur(4px) drop-shadow(…)" → [{name, args}]. */
+    function cssFunctions(str) {
+      const out = [];
+      const s = String(str || '');
+      const re = /([a-z-]+)\(/gi;
+      let m;
+      while ((m = re.exec(s))) {
+        let depth = 1, quote = '', j = m.index + m[0].length;
+        for (; j < s.length && depth; j++) {
+          const ch = s[j];
+          if (quote) { if (ch === quote) quote = ''; }
+          else if (ch === '"' || ch === "'") quote = ch;
+          else if (ch === '(') depth++;
+          else if (ch === ')') depth--;
+        }
+        out.push({ name: m[1].toLowerCase(), args: s.slice(m.index + m[0].length, j - 1) });
+        re.lastIndex = j;
+      }
+      return out;
+    }
+
+    /** Computed length / percentage / keyword / simple calc(% ± px) → px, % of `basis`. */
+    function lenPx(tok, basis) {
+      const t = String(tok || '').trim();
+      const kw = { left: 0, top: 0, center: 50, right: 100, bottom: 100 }[t];
+      if (kw !== undefined) return basis * kw / 100;
+      let v = 0;
+      (t.replace(/^calc\(/, '').match(/[-+]?\s*[\d.]+(?:e[-+]?\d+)?%?/gi) || []).forEach(function (term) {
+        const n = parseFloat(term.replace(/\s+/g, ''));
+        v += /%$/.test(term) ? basis * n / 100 : n;
+      });
+      return v;
+    }
+
+    /** background-position / object-position axis: offset of an item inside `free` space. */
+    function posOffset(tok, free) {
+      const m = String(tok || '').trim().match(/^(left|right|top|bottom|center)\s+(.+)$/);
+      if (!m) return lenPx(tok, free);
+      const off = lenPx(m[2], free);
+      return m[1] === 'right' || m[1] === 'bottom' ? free - off : off;
+    }
+
+    function angleDeg(tok) {
+      const m = String(tok || '').trim().match(/^(-?[\d.]+)(deg|rad|turn|grad)?$/);
+      if (!m) return 0;
+      const v = parseFloat(m[1]);
+      return m[2] === 'rad' ? v * 180 / Math.PI : m[2] === 'turn' ? v * 360 : m[2] === 'grad' ? v * 0.9 : v;
+    }
+
+    /** Any CSS color → {r,g,b,a} in 0–1. Fully transparent → null unless keepClear. */
+    function parseColor(css, keepClear) {
+      const raw = String(css || '').trim();
+      if (!raw || raw === 'none' || /^currentcolor$/i.test(raw)) return null;
+      const c = parseHexOrRgb(raw) || parseSrgb(raw) || canvasColor(raw);
+      if (!c) return null;
+      return c.a < 0.004 && !keepClear ? null : c;
     }
 
     function parseHexOrRgb(raw) {
       const hex = raw.match(/^#([0-9a-f]{3,8})$/i);
       if (hex) {
         let h = hex[1];
-        if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-        if (h.length === 4) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+h[3]+h[3];
+        if (h.length === 3 || h.length === 4) h = h.split('').map(function (c) { return c + c; }).join('');
         return {
           r: parseInt(h.slice(0, 2), 16) / 255,
           g: parseInt(h.slice(2, 4), 16) / 255,
@@ -566,757 +747,1543 @@
           a: h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1
         };
       }
+      // rgb(1, 2, 3) / rgba(1, 2, 3, 0.5) / rgb(1 2 3 / 50%)
+      const m = raw.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i);
+      if (!m) return null;
+      return {
+        r: Math.min(255, parseFloat(m[1])) / 255,
+        g: Math.min(255, parseFloat(m[2])) / 255,
+        b: Math.min(255, parseFloat(m[3])) / 255,
+        a: m[4] === undefined ? 1 : /%$/.test(m[4]) ? parseFloat(m[4]) / 100 : parseFloat(m[4])
+      };
+    }
 
-      // Classic: rgb(247, 241, 228) / rgba(..., 0.45)
-      let m = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
-      if (m) {
+    function parseSrgb(raw) {
+      const m = raw.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i);
+      if (!m) return null;
+      const c = function (v) { return Math.max(0, Math.min(1, parseFloat(v))); };
+      return { r: c(m[1]), g: c(m[2]), b: c(m[3]), a: m[4] === undefined ? 1 : /%$/.test(m[4]) ? parseFloat(m[4]) / 100 : parseFloat(m[4]) };
+    }
+
+    /** lab() / oklch() / named colors: let a canvas convert them to sRGB. */
+    function canvasColor(raw) {
+      const ctx = canvasColor.ctx || (canvasColor.ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true }));
+      ctx.fillStyle = '#010203';
+      ctx.fillStyle = raw;
+      const norm = String(ctx.fillStyle);
+      if (norm === '#010203') return null; // not a color
+      const parsed = parseHexOrRgb(norm) || parseSrgb(norm);
+      if (parsed) return parsed;
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillRect(0, 0, 1, 1);
+      const d = ctx.getImageData(0, 0, 1, 1).data;
+      return { r: d[0] / 255, g: d[1] / 255, b: d[2] / 255, a: d[3] / 255 };
+    }
+
+    function hex(c) {
+      const h = function (n) { return Math.round(n * 255).toString(16).padStart(2, '0'); };
+      return '#' + h(c.r) + h(c.g) + h(c.b);
+    }
+
+    function sameRgb(a, b) {
+      return Math.abs(a.r - b.r) < 0.004 && Math.abs(a.g - b.g) < 0.004 && Math.abs(a.b - b.b) < 0.004;
+    }
+
+    function sameColor(a, b) { return sameRgb(a, b) && Math.abs(a.a - b.a) < 0.004; }
+
+    function lerpColor(a, b, k) {
+      return { r: a.r + (b.r - a.r) * k, g: a.g + (b.g - a.g) * k, b: a.b + (b.b - a.b) * k, a: a.a + (b.a - a.a) * k };
+    }
+
+    // -------------------------------------------------------------------------
+    // Paints: solid / gradient / image, bottom → top (Figma order)
+    // -------------------------------------------------------------------------
+
+    function solidPaint(c) { return { type: 'SOLID', color: c }; }
+    function imagePaint(id) { return { type: 'IMAGE', scaleMode: 'FILL', imageRef: id }; }
+
+    function storeImage(b64) {
+      if (!b64) return null;
+      const id = 'img' + (imageSeq++);
+      imageStore[id] = b64;
+      return id;
+    }
+
+    function makeCanvas(w, h, maxScale) {
+      const s = Math.min(maxScale || 2, 4096 / Math.max(w, h, 1));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * s));
+      c.height = Math.max(1, Math.round(h * s));
+      const ctx = c.getContext('2d');
+      ctx.scale(c.width / w, c.height / h);
+      return { c: c, ctx: ctx };
+    }
+
+    /** base64 PNG, or JPEG when `photo` and every pixel is opaque (photos stay small). */
+    function canvasB64(c, photo) {
+      try {
+        let jpeg = false;
+        if (photo) {
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          jpeg = true;
+          for (let i = 3; i < d.length; i += 16) if (d[i] < 255) { jpeg = false; break; }
+        }
+        const url = c.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.9);
+        return url.slice(url.indexOf(',') + 1);
+      } catch (e) {
+        return null; // tainted by a cross-origin image
+      }
+    }
+
+    function loadImage(url) {
+      if (!imageLoads.has(url)) {
+        imageLoads.set(url, new Promise(function (resolve) {
+          const img = new Image();
+          if (!/^(data|blob):/i.test(url)) img.crossOrigin = 'anonymous';
+          const timer = setTimeout(function () { resolve(null); }, 10000);
+          img.onload = function () { clearTimeout(timer); resolve(img); };
+          img.onerror = function () { clearTimeout(timer); resolve(null); };
+          img.src = url;
+        }));
+      }
+      return imageLoads.get(url);
+    }
+
+    async function drawUrl(url, w, h) {
+      const img = await loadImage(url);
+      if (!img) return null;
+      const k = makeCanvas(w, h);
+      k.ctx.drawImage(img, 0, 0, w, h);
+      return canvasB64(k.c);
+    }
+
+    function isColorToken(part) { return !!parseColor(splitTopLevel(part, ' ')[0], true); }
+
+    /** CSS color stops → Figma stops in [0,1]. `len` = gradient ray length for px stops. */
+    function gradientStops(parts, len) {
+      len = Math.max(len, 1e-6);
+      const stops = [];
+      parts.forEach(function (part) {
+        let color = null;
+        const pos = [];
+        splitTopLevel(part, ' ').forEach(function (t) {
+          if (/^[-+.\d]|^calc\(/i.test(t)) pos.push(lenPx(t, len) / len);
+          else color = parseColor(t, true) || color;
+        });
+        if (!color) return; // interpolation hint
+        if (!pos.length) stops.push({ pos: null, color: color });
+        pos.forEach(function (p) { stops.push({ pos: p, color: color }); });
+      });
+      if (!stops.length) return null;
+      if (stops.length === 1) stops.push({ pos: 1, color: stops[0].color });
+      if (stops[0].pos === null) stops[0].pos = 0;
+      if (stops[stops.length - 1].pos === null) stops[stops.length - 1].pos = 1;
+      let max = -Infinity;
+      stops.forEach(function (s) { if (s.pos !== null) { s.pos = Math.max(s.pos, max); max = s.pos; } });
+      for (let i = 1; i < stops.length; i++) {
+        if (stops[i].pos !== null) continue;
+        let j = i;
+        while (stops[j].pos === null) j++;
+        const a = stops[i - 1].pos, b = stops[j].pos;
+        for (let k = i; k < j; k++) stops[k].pos = a + (b - a) * (k - i + 1) / (j - i + 1);
+      }
+      // CSS interpolates premultiplied: a transparent stop takes its neighbours'
+      // hue instead of fading through black.
+      const out = [];
+      stops.forEach(function (s, i) {
+        if (s.color.a > 0.001) { out.push(s); return; }
+        const p = i > 0 && stops[i - 1].color.a > 0.001 ? stops[i - 1].color : null;
+        const n = i < stops.length - 1 && stops[i + 1].color.a > 0.001 ? stops[i + 1].color : null;
+        if (!p && !n) { out.push(s); return; }
+        if (p) out.push({ pos: s.pos, color: Object.assign({}, p, { a: 0 }) });
+        if (n && (!p || !sameRgb(p, n))) out.push({ pos: s.pos, color: Object.assign({}, n, { a: 0 }) });
+      });
+      // Figma stops live in [0,1]: cut stops outside it at the interpolated colour.
+      const at = function (t) {
+        if (t <= out[0].pos) return out[0].color;
+        for (let i = 1; i < out.length; i++) {
+          if (t <= out[i].pos) {
+            const a = out[i - 1], b = out[i];
+            return lerpColor(a.color, b.color, b.pos === a.pos ? 1 : (t - a.pos) / (b.pos - a.pos));
+          }
+        }
+        return out[out.length - 1].color;
+      };
+      return [{ pos: 0, color: at(0) }]
+        .concat(out.filter(function (s) { return s.pos > 0 && s.pos < 1; }), [{ pos: 1, color: at(1) }])
+        .map(function (s) { return { position: s.pos, color: s.color }; });
+    }
+
+    function linearAngle(tok, w, h) {
+      const t = tok.trim().toLowerCase();
+      if (!/^to\s/.test(t)) return angleDeg(t);
+      const top = t.indexOf('top') >= 0, bottom = t.indexOf('bottom') >= 0;
+      const left = t.indexOf('left') >= 0, right = t.indexOf('right') >= 0;
+      if ((top || bottom) && (left || right)) {
+        // Corner directions depend on the box: the 50% line runs corner to corner.
+        const a = Math.atan2(h, w) * 180 / Math.PI;
+        return top ? (right ? a : 360 - a) : (right ? 180 - a : 180 + a);
+      }
+      return top ? 0 : right ? 90 : left ? 270 : 180;
+    }
+
+    function linearPaint(args, w, h) {
+      const parts = splitTopLevel(args, ',');
+      let angle = 180;
+      if (parts.length && !isColorToken(parts[0])) angle = linearAngle(parts.shift(), w, h);
+      const rad = angle * Math.PI / 180;
+      const dx = Math.sin(rad), dy = -Math.cos(rad);
+      const len = Math.abs(w * dx) + Math.abs(h * dy);
+      const stops = gradientStops(parts, len);
+      if (!stops) return null;
+      // Figma gradient space: t runs 0→1 along x. Map node-normalized (u, v) into it:
+      // t = ((p − centre) · dir) / len + 0.5, with p = (u·w, v·h).
+      return {
+        type: 'GRADIENT_LINEAR',
+        gradientStops: stops,
+        gradientTransform: [
+          [w * dx / len, h * dy / len, 0.5 - (w / 2 * dx + h / 2 * dy) / len],
+          [-w * dy / len, h * dx / len, 0.5 - (h / 2 * dx - w / 2 * dy) / len]
+        ]
+      };
+    }
+
+    function radialPaint(args, w, h) {
+      const parts = splitTopLevel(args, ',');
+      const cfg = parts.length && !isColorToken(parts[0]) ? parts.shift() : '';
+      const at = cfg.split(/\bat\b/);
+      const shape = splitTopLevel(at[0] || '', ' ');
+      const pos = splitTopLevel(at[1] || 'center', ' ');
+      let px0 = pos[0] || 'center', py0 = pos[1] || 'center';
+      if (/^(top|bottom)$/.test(px0) || /^(left|right)$/.test(py0)) { const t = px0; px0 = py0; py0 = t; }
+      const cx = posOffset(px0, w), cy = posOffset(py0, h);
+      const lens = shape.filter(function (t) { return /^[-+.\d]|^calc\(/i.test(t); });
+      const circle = shape.indexOf('circle') >= 0 || (lens.length === 1 && shape.indexOf('ellipse') < 0);
+      const kw = shape.filter(function (t) { return /-(side|corner)$/.test(t); })[0] || 'farthest-corner';
+      let rx, ry;
+      if (lens.length) {
+        rx = lenPx(lens[0], w);
+        ry = circle ? rx : lenPx(lens[1] || lens[0], h);
+      } else {
+        const pick = kw.indexOf('closest') === 0 ? Math.min : Math.max;
+        const sx = pick(Math.abs(cx), Math.abs(w - cx)), sy = pick(Math.abs(cy), Math.abs(h - cy));
+        if (/side$/.test(kw)) { rx = circle ? pick(sx, sy) : sx; ry = circle ? rx : sy; }
+        else if (circle) rx = ry = Math.hypot(sx, sy);
+        else { rx = sx * Math.SQRT2; ry = sy * Math.SQRT2; }
+      }
+      rx = Math.max(rx, 0.01);
+      ry = Math.max(ry, 0.01);
+      const stops = gradientStops(parts, rx);
+      if (!stops) return null;
+      // Figma radial space: centre (0.5, 0.5), radius 0.5 on both axes.
+      return {
+        type: 'GRADIENT_RADIAL',
+        gradientStops: stops,
+        gradientTransform: [[w / (2 * rx), 0, 0.5 - cx / (2 * rx)], [0, h / (2 * ry), 0.5 - cy / (2 * ry)]]
+      };
+    }
+
+    /** Move a gradient defined on box `from` onto box `to` (e.g. clip-text onto its text layer). */
+    function remapPaint(p, from, to) {
+      if (!p.gradientTransform || !from.w || !from.h) return p;
+      const a = p.gradientTransform, sx = to.w / from.w, sy = to.h / from.h;
+      const tx = (to.x - from.x) / from.w, ty = (to.y - from.y) / from.h;
+      return Object.assign({}, p, {
+        gradientTransform: [
+          [a[0][0] * sx, a[0][1] * sy, a[0][0] * tx + a[0][1] * ty + a[0][2]],
+          [a[1][0] * sx, a[1][1] * sy, a[1][0] * tx + a[1][1] * ty + a[1][2]]
+        ]
+      });
+    }
+
+    async function backgroundPaints(el, cs, box) {
+      const out = [];
+      const bg = parseColor(cs.backgroundColor);
+      if (bg) out.push(solidPaint(bg));
+      const image = cs.backgroundImage;
+      if (!image || image === 'none' || box.w < 0.5 || box.h < 0.5) return out;
+      const layers = splitTopLevel(image, ',');
+      const nth = function (v, i) { const l = splitTopLevel(v, ','); return l.length ? l[i % l.length] : ''; };
+      for (let i = layers.length - 1; i >= 0; i--) { // CSS lists the top layer first
+        const p = await layerPaint(layers[i], {
+          size: nth(cs.backgroundSize, i) || 'auto',
+          x: nth(cs.backgroundPositionX, i) || '0%',
+          y: nth(cs.backgroundPositionY, i) || '0%',
+          repeat: nth(cs.backgroundRepeat, i) || 'repeat'
+        }, box, cs);
+        if (p) out.push(p);
+      }
+      return out;
+    }
+
+    async function layerPaint(layer, opt, box, cs) {
+      const fn = cssFunctions(layer)[0];
+      const name = fn ? fn.name : '';
+      const full = /^(auto|auto auto|cover|contain|100% 100%)$/.test(opt.size);
+      if (name === 'linear-gradient' && full) return linearPaint(fn.args, box.w, box.h);
+      if (name === 'radial-gradient' && full) return radialPaint(fn.args, box.w, box.h);
+      if (name === 'url') return urlLayerPaint(fn.args.trim().replace(/^(["'])([\s\S]*)\1$/, '$2'), opt, box, cs);
+      // Repeating / conic / tiled gradients: let the browser paint just that layer.
+      return imagePaintOrNull(await rasterCssLayer(layer, opt, box.w, box.h));
+    }
+
+    function imagePaintOrNull(b64) {
+      const id = storeImage(b64);
+      return id ? imagePaint(id) : null;
+    }
+
+    /** url() background, drawn exactly as CSS sizes, positions and tiles it. */
+    async function urlLayerPaint(url, opt, box, cs) {
+      if (!url) return null;
+      const remote = /^https?:/i.test(url);
+      const fallback = remote ? { type: 'IMAGE', scaleMode: opt.size === 'contain' ? 'FIT' : 'FILL', url: url } : null;
+      const img = await loadImage(url);
+      if (!img) return fallback; // no CORS: Figma fetches it itself (approximate crop)
+      // Positioning area = padding box.
+      const bl = px(cs.borderLeftWidth), bt = px(cs.borderTopWidth);
+      const ow = box.w - bl - px(cs.borderRightWidth), oh = box.h - bt - px(cs.borderBottomWidth);
+      const nw = img.naturalWidth || ow, nh = img.naturalHeight || oh;
+      let tw, th;
+      if (opt.size === 'cover' || opt.size === 'contain') {
+        const s = (opt.size === 'cover' ? Math.max : Math.min)(ow / nw, oh / nh);
+        tw = nw * s;
+        th = nh * s;
+      } else {
+        const sz = splitTopLevel(opt.size, ' ');
+        tw = sz[0] && sz[0] !== 'auto' ? lenPx(sz[0], ow) : null;
+        th = sz[1] && sz[1] !== 'auto' ? lenPx(sz[1], oh) : null;
+        if (tw === null && th === null) { tw = nw; th = nh; }
+        else if (tw === null) tw = th * nw / nh;
+        else if (th === null) th = tw * nh / nw;
+      }
+      if (!(tw > 0.5 && th > 0.5)) return null;
+      const x0 = bl + posOffset(opt.x, ow - tw), y0 = bt + posOffset(opt.y, oh - th);
+      const rep = splitTopLevel(opt.repeat, ' ');
+      let rx = rep[0], ry = rep[1] || rep[0];
+      if (rep[0] === 'repeat-x') { rx = 'repeat'; ry = 'no-repeat'; }
+      if (rep[0] === 'repeat-y') { rx = 'no-repeat'; ry = 'repeat'; }
+      const starts = function (p, size, total, tile) {
+        if (!tile) return [p];
+        const out = [];
+        for (let v = p - Math.ceil(p / size) * size; v < total; v += size) out.push(v);
+        return out;
+      };
+      const xs = starts(x0, tw, box.w, rx !== 'no-repeat'), ys = starts(y0, th, box.h, ry !== 'no-repeat');
+      if (xs.length * ys.length > 20000) return fallback;
+      const k = makeCanvas(box.w, box.h);
+      xs.forEach(function (x) { ys.forEach(function (y) { k.ctx.drawImage(img, x, y, tw, th); }); });
+      const covers = (rx !== 'no-repeat' || (x0 <= 0.5 && x0 + tw >= box.w - 0.5)) &&
+        (ry !== 'no-repeat' || (y0 <= 0.5 && y0 + th >= box.h - 0.5));
+      return imagePaintOrNull(canvasB64(k.c, covers)) || fallback;
+    }
+
+    /** Paint a single background layer with the browser itself (SVG foreignObject). */
+    function rasterCssLayer(layer, opt, w, h) {
+      const css = 'width:' + w + 'px;height:' + h + 'px;background-image:' + layer +
+        ';background-size:' + opt.size + ';background-position:' + opt.x + ' ' + opt.y +
+        ';background-repeat:' + opt.repeat + ';';
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+        '<foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="' +
+        css.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;') + '"></div></foreignObject></svg>';
+      return drawUrl('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), w, h);
+    }
+
+    /** Pixels of an img / canvas / video, fitted like the browser (object-fit / -position). */
+    function drawReplaced(src, nw, nh, box, cs) {
+      if (!nw || !nh) return null;
+      const bl = px(cs.borderLeftWidth) + px(cs.paddingLeft), bt = px(cs.borderTopWidth) + px(cs.paddingTop);
+      const cw = box.w - bl - px(cs.borderRightWidth) - px(cs.paddingRight);
+      const ch = box.h - bt - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+      if (cw < 0.5 || ch < 0.5) return null;
+      const fit = cs.objectFit;
+      let w = cw, h = ch;
+      if (fit === 'contain' || fit === 'cover' || fit === 'scale-down') {
+        let s = (fit === 'cover' ? Math.max : Math.min)(cw / nw, ch / nh);
+        if (fit === 'scale-down') s = Math.min(s, 1);
+        w = nw * s;
+        h = nh * s;
+      } else if (fit === 'none') { w = nw; h = nh; }
+      const pos = splitTopLevel(cs.objectPosition || '50% 50%', ' ');
+      const x = bl + posOffset(pos[0] || '50%', cw - w), y = bt + posOffset(pos[1] || '50%', ch - h);
+      const k = makeCanvas(box.w, box.h, Math.max(1, Math.min(2, nw / w)));
+      k.ctx.beginPath();
+      k.ctx.rect(bl, bt, cw, ch);
+      k.ctx.clip();
+      if (cs.filter && cs.filter !== 'none') k.ctx.filter = cs.filter;
+      try { k.ctx.drawImage(src, x, y, w, h); } catch (e) { return null; }
+      const full = !bl && !bt && cw >= box.w - 0.5 && ch >= box.h - 0.5 && x <= 0.5 && y <= 0.5 && w >= cw - 0.5 && h >= ch - 0.5;
+      return canvasB64(k.c, full);
+    }
+
+    // -------------------------------------------------------------------------
+    // Borders / radii / effects / transforms
+    // -------------------------------------------------------------------------
+
+    function hasBoxLook(cs) {
+      return !!parseColor(cs.backgroundColor) || (cs.backgroundImage && cs.backgroundImage !== 'none') ||
+        (cs.boxShadow && cs.boxShadow !== 'none') ||
+        SIDES.some(function (s) {
+          return px(cs['border' + s + 'Width']) > 0 && !/none|hidden/.test(cs['border' + s + 'Style']) &&
+            !!parseColor(cs['border' + s + 'Color']);
+        });
+    }
+
+    /** Same colour on every bordered side → one stroke with per-side weights; else vector sides. */
+    function readBorders(cs, box) {
+      const sides = SIDES.map(function (s) {
+        const style = cs['border' + s + 'Style'];
+        const w = /none|hidden/.test(style) ? 0 : px(cs['border' + s + 'Width']);
+        return { w: w, style: style, c: w ? parseColor(cs['border' + s + 'Color']) : null };
+      });
+      const wide = sides.filter(function (s) { return s.w > 0; });
+      const first = wide.filter(function (s) { return s.c; })[0];
+      if (!first) return null;
+      if (wide.every(function (s) { return s.c && sameColor(s.c, first.c) && s.style === first.style; })) {
+        const w = first.w;
         return {
-          r: Math.min(255, parseFloat(m[1])) / 255,
-          g: Math.min(255, parseFloat(m[2])) / 255,
-          b: Math.min(255, parseFloat(m[3])) / 255,
-          a: m[4] !== undefined ? parseFloat(m[4]) : 1
+          stroke: {
+            color: first.c, t: sides[0].w, r: sides[1].w, b: sides[2].w, l: sides[3].w,
+            dash: first.style === 'dashed' ? [w * 3, w * 3] : first.style === 'dotted' ? [w, w] : undefined
+          }
         };
       }
+      // Mixed colours (incl. transparent sides of CSS triangles): each side is a
+      // trapezoid, clipped to the rounded border ring when there are radii.
+      const W = box.w, H = box.h, t = sides[0].w, r = sides[1].w, b = sides[2].w, l = sides[3].w;
+      const poly = function (s, pts) {
+        return s.w > 0 && s.c ? '<polygon points="' + pts.join(' ') + '" fill="' + hex(s.c) + '" fill-opacity="' + s.c.a + '"/>' : '';
+      };
+      let body = poly(sides[0], ['0,0', W + ',0', (W - r) + ',' + t, l + ',' + t]) +
+        poly(sides[1], [W + ',0', W + ',' + H, (W - r) + ',' + (H - b), (W - r) + ',' + t]) +
+        poly(sides[2], ['0,' + H, W + ',' + H, (W - r) + ',' + (H - b), l + ',' + (H - b)]) +
+        poly(sides[3], ['0,0', l + ',' + t, l + ',' + (H - b), '0,' + H]);
+      const rad = readRadii(cs, W, H);
+      if (rad) {
+        const inner = [[rad[0] - l, rad[0] - t], [rad[1] - r, rad[1] - t], [rad[2] - r, rad[2] - b], [rad[3] - l, rad[3] - b]]
+          .map(function (c) { return [Math.max(0, c[0]), Math.max(0, c[1])]; });
+        const ring = roundRectPath(0, 0, W, H, rad.map(function (v) { return [v, v]; })) +
+          (W - l - r > 0 && H - t - b > 0 ? roundRectPath(l, t, W - l - r, H - t - b, inner) : '');
+        body = '<defs><clipPath id="ring"><path clip-rule="evenodd" d="' + ring + '"/></clipPath></defs><g clip-path="url(#ring)">' + body + '</g>';
+      }
+      return { svg: svgDoc(W, H, body) };
+    }
 
-      // Modern: rgb(247 241 228) / rgb(38 33 27 / 0.45)
-      m = raw.match(/^rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i);
-      if (m) {
-        let a = 1;
-        if (m[4] !== undefined) {
-          a = String(m[4]).indexOf('%') >= 0 ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
-        }
-        return {
-          r: Math.min(255, parseFloat(m[1])) / 255,
-          g: Math.min(255, parseFloat(m[2])) / 255,
-          b: Math.min(255, parseFloat(m[3])) / 255,
-          a: a
-        };
+    /** SVG path for a box with per-corner [rx, ry] radii (tl, tr, br, bl). */
+    function roundRectPath(x, y, w, h, c) {
+      return 'M' + (x + c[0][0]) + ',' + y + 'H' + (x + w - c[1][0]) +
+        'A' + c[1][0] + ',' + c[1][1] + ' 0 0 1 ' + (x + w) + ',' + (y + c[1][1]) + 'V' + (y + h - c[2][1]) +
+        'A' + c[2][0] + ',' + c[2][1] + ' 0 0 1 ' + (x + w - c[2][0]) + ',' + (y + h) + 'H' + (x + c[3][0]) +
+        'A' + c[3][0] + ',' + c[3][1] + ' 0 0 1 ' + x + ',' + (y + h - c[3][1]) + 'V' + (y + c[0][1]) +
+        'A' + c[0][0] + ',' + c[0][1] + ' 0 0 1 ' + (x + c[0][0]) + ',' + y + 'Z';
+    }
+
+    function readRadii(cs, w, h) {
+      const r = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(function (k) {
+        const v = splitTopLevel(cs['border' + k + 'Radius'], ' ');
+        // ponytail: Figma corners are circular; elliptical radii use the smaller axis.
+        return Math.max(0, Math.min(lenPx(v[0], w), lenPx(v[1] || v[0], h)));
+      });
+      if (!r.some(Boolean)) return null;
+      // CSS shrinks all radii when adjacent ones overflow a side.
+      const f = Math.min(1, w / (r[0] + r[1] || 1), w / (r[3] + r[2] || 1), h / (r[0] + r[3] || 1), h / (r[1] + r[2] || 1));
+      return r.map(function (v) { return v * f; });
+    }
+
+    function parseShadows(css, withSpread) {
+      if (!css || css === 'none') return [];
+      const out = [];
+      splitTopLevel(css, ',').forEach(function (part) {
+        let color = null, inset = false;
+        const n = [];
+        splitTopLevel(part, ' ').forEach(function (t) {
+          if (t === 'inset') inset = true;
+          else if (/^[-+.\d]/.test(t)) n.push(px(t));
+          else color = parseColor(t);
+        });
+        if (!color || n.length < 2) return;
+        out.push({
+          type: inset ? 'INNER_SHADOW' : 'DROP_SHADOW', color: color, offset: { x: n[0], y: n[1] },
+          radius: Math.max(0, n[2] || 0), spread: withSpread ? n[3] || 0 : 0, visible: true, blendMode: 'NORMAL'
+        });
+      });
+      return out;
+    }
+
+    function readEffects(cs, replaced) {
+      const fx = parseShadows(cs.boxShadow, true);
+      // Replaced elements get their filter baked into the pixels instead.
+      if (!replaced) {
+        cssFunctions(cs.filter).forEach(function (f) {
+          // Figma blur radius ≈ 2σ, CSS blur() takes σ.
+          if (f.name === 'blur' && px(f.args) > 0) fx.push({ type: 'LAYER_BLUR', blurType: 'NORMAL', radius: px(f.args) * 2, visible: true });
+          if (f.name === 'drop-shadow') fx.push.apply(fx, parseShadows(f.args, false));
+        });
+      }
+      const bd = cssFunctions(cs.backdropFilter || cs.webkitBackdropFilter).filter(function (f) { return f.name === 'blur'; })[0];
+      if (bd && px(bd.args) > 0) fx.push({ type: 'BACKGROUND_BLUR', blurType: 'NORMAL', radius: px(bd.args) * 2, visible: true });
+      return fx;
+    }
+
+    function parseMatrix(t) {
+      const n = (t.slice(t.indexOf('(') + 1).match(/-?[\d.]+(?:e-?\d+)?/g) || []).map(Number);
+      if (/^matrix\(/.test(t) && n.length === 6) return n;
+      if (/^matrix3d\(/.test(t) && n.length === 16) {
+        const flat = [2, 3, 6, 7, 8, 9, 11, 14].every(function (i) { return Math.abs(n[i]) < 1e-6; }) &&
+          Math.abs(n[10] - 1) < 1e-6 && Math.abs(n[15] - 1) < 1e-6;
+        return flat ? [n[0], n[1], n[4], n[5], n[12], n[13]] : null;
       }
       return null;
     }
 
-    function clamp01(n) {
-      if (n < 0) return 0;
-      if (n > 1) return 1;
-      return n;
+    /** translate · rotate · scale · transform, as one 2D matrix (null = 3D / unsupported). */
+    function cssMatrix(el, cs) {
+      const mul = function (p, q) {
+        return [p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1], p[0] * q[2] + p[2] * q[3], p[1] * q[2] + p[3] * q[3],
+          p[0] * q[4] + p[2] * q[5] + p[4], p[1] * q[4] + p[3] * q[5] + p[5]];
+      };
+      const set = function (v) { return v && v !== 'none'; };
+      let m = [1, 0, 0, 1, 0, 0];
+      if (set(cs.translate)) {
+        const t = splitTopLevel(cs.translate, ' ');
+        m = mul(m, [1, 0, 0, 1, lenPx(t[0], el.offsetWidth || 0), lenPx(t[1] || '0', el.offsetHeight || 0)]);
+      }
+      if (set(cs.rotate)) {
+        const t = splitTopLevel(cs.rotate, ' ');
+        if ((t.length === 2 && t[0] !== 'z') || (t.length === 4 && (px(t[0]) || px(t[1])))) return null;
+        const a = angleDeg(t[t.length - 1]) * Math.PI / 180;
+        m = mul(m, [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 0, 0]);
+      }
+      if (set(cs.scale)) {
+        const t = splitTopLevel(cs.scale, ' ').map(function (v) { return /%$/.test(v) ? parseFloat(v) / 100 : parseFloat(v); });
+        m = mul(m, [t[0], 0, 0, t.length > 1 ? t[1] : t[0], 0, 0]);
+      }
+      if (set(cs.transform)) {
+        const t = parseMatrix(cs.transform);
+        if (!t) return null;
+        m = mul(m, t);
+      }
+      return m;
     }
 
-    function backgroundNeedsRaster(style) {
-      const img = style.backgroundImage || '';
-      if (!img || img === 'none') return false;
-      const lower = img.toLowerCase();
-      if (lower.indexOf('url(') >= 0) return true;
-      if (lower.indexOf('radial-gradient(') >= 0) return true;
-      if (lower.indexOf('conic-gradient(') >= 0) return true;
-      const layers = splitTopLevel(img, ',');
-      if (layers.length > 1) return true;
-      return lower.indexOf('linear-gradient(') < 0;
+    /** Rotation / uniform scale that Figma can reproduce; everything else keeps the measured box. */
+    function readTransform(el, cs) {
+      const m = cssMatrix(el, cs);
+      if (!m) return null;
+      const a = m[0], b = m[1], c = m[2], d = m[3];
+      if (Math.abs(b) < 1e-6 && Math.abs(c) < 1e-6 && Math.abs(a - 1) < 1e-6 && Math.abs(d - 1) < 1e-6) return null; // translate only
+      const s = Math.hypot(a, b);
+      if (s < 1e-6 || Math.abs(Math.hypot(c, d) - s) > 1e-3 * s || Math.abs(a * c + b * d) > 1e-3 * s * s || a * d - b * c < 0) return null;
+      const o = splitTopLevel(cs.transformOrigin, ' ');
+      return { m: m, ox: px(o[0]), oy: px(o[1]) };
     }
 
-    async function rasterizeElementLook(el, width, height) {
-      const w = Math.max(Math.ceil(width), 1);
-      const h = Math.max(Math.ceil(height), 1);
-      // Cap raster size so large photo blocks don't blow the plugin message limit
-      const maxEdge = 900;
-      const scale = Math.min(1, maxEdge / Math.max(w, h));
-      const rw = Math.max(Math.round(w * scale), 1);
-      const rh = Math.max(Math.round(h * scale), 1);
-      const win = (el.ownerDocument && el.ownerDocument.defaultView) || window;
-      const cs = win.getComputedStyle(el);
-      const clone = el.cloneNode(false);
-      const props = [
-        'background', 'background-color', 'background-image', 'background-size',
-        'background-position', 'background-repeat', 'border-radius'
-      ];
-      let cssText = 'width:' + rw + 'px;height:' + rh + 'px;margin:0;padding:0;box-sizing:border-box;';
-      for (let i = 0; i < props.length; i++) {
-        const val = cs.getPropertyValue(props[i]);
-        if (val) cssText += props[i] + ':' + val + ';';
-      }
-      clone.setAttribute('style', cssText);
-      const wrapper = '<div xmlns="http://www.w3.org/1999/xhtml" style="width:' + rw +
-        'px;height:' + rh + 'px;overflow:hidden;">' + clone.outerHTML + '</div>';
-      const svg =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="' + rw + '" height="' + rh + '">' +
-        '<foreignObject width="100%" height="100%">' + wrapper + '</foreignObject></svg>';
-      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-      try {
-        // scale=1 — backgrounds are already downsampled via maxEdge
-        return await drawUrlToPngBase64(url, rw, rh, 1);
-      } catch (e) {
-        return null;
-      }
+    // -------------------------------------------------------------------------
+    // Text
+    // -------------------------------------------------------------------------
+
+    const GENERIC_FONTS = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded|math|emoji|fangsong)$/i;
+    const ICON_FONT = /icon|awesome|material|symbol|glyph|remix|ionic|feather|phosphor|tabler|lucide|boxicon|fontello|dashicon|octicon/i;
+
+    /** The font-family stack minus families this browser couldn't use: [0] is what it drew with. */
+    function browserFamilies(list) {
+      const all = splitTopLevel(list, ',').map(function (f) { return f.replace(/^["']|["']$/g, '').trim(); }).filter(Boolean);
+      const used = all.filter(function (f) { return GENERIC_FONTS.test(f) || browserHasFont(f); });
+      return used.length ? used : all;
     }
 
-    function splitTopLevel(str, sep) {
-      const out = [];
-      let cur = '';
-      let depth = 0;
-      for (let i = 0; i < str.length; i++) {
-        const ch = str[i];
-        if (ch === '(') depth++;
-        if (ch === ')') depth--;
-        if (ch === sep && depth === 0) {
-          out.push(cur);
-          cur = '';
-        } else cur += ch;
-      }
-      if (cur) out.push(cur);
+    function browserHasFont(family) {
+      if (fontCheck.has(family)) return fontCheck.get(family);
+      const ctx = fontProbe || (fontProbe = doc.createElement('canvas').getContext('2d'));
+      const probe = 'mmmmmmmmmmlli10WQ@#';
+      let ok = false;
+      ['monospace', 'serif'].forEach(function (base) {
+        ctx.font = '72px ' + base;
+        const a = ctx.measureText(probe).width;
+        ctx.font = '72px "' + family.replace(/"/g, '') + '", ' + base;
+        if (ctx.measureText(probe).width !== a) ok = true;
+      });
+      fontCheck.set(family, ok);
+      return ok;
+    }
+
+    /** Weight of the web-font face the browser really used (a page may load 600 but ask for 700). */
+    function faceWeight(family, weight, italic) {
+      const faces = [];
+      if (doc.fonts) doc.fonts.forEach(function (f) {
+        if (f.status === 'loaded' && f.family.replace(/^["']|["']$/g, '') === family) faces.push(f);
+      });
+      const styled = faces.filter(function (f) { return (f.style !== 'normal') === italic; });
+      let best = null;
+      (styled.length ? styled : faces).forEach(function (f) {
+        const range = f.weight.replace('normal', '400').replace('bold', '700').split(/\s+/).map(Number);
+        const w = Math.min(Math.max(weight, range[0]), range[1] || range[0]);
+        const d = Math.abs(w - weight), bd = best === null ? Infinity : Math.abs(best - weight);
+        if (d < bd || (d === bd && (weight >= 500 ? w > best : w < best))) best = w;
+      });
+      return best === null ? weight : best;
+    }
+
+    function decoLine(cs) {
+      const l = cs.textDecorationLine || '';
+      return l.indexOf('underline') >= 0 ? 'UNDERLINE' : l.indexOf('line-through') >= 0 ? 'STRIKETHROUGH' : null;
+    }
+
+    function isClipText(cs) { return /text/.test(cs.webkitBackgroundClip || '') || /text/.test(cs.backgroundClip || ''); }
+
+    function mapAlign(v) {
+      return /center/.test(v) ? 'CENTER' : /right|end/.test(v) ? 'RIGHT' : v === 'justify' ? 'JUSTIFIED' : 'LEFT';
+    }
+
+    function runStyle(cs, el, inh) {
+      const tt = cs.textTransform;
+      const families = browserFamilies(cs.fontFamily);
+      const link = el.closest && el.closest('a[href]');
+      const href = link && link.getAttribute('href');
+      return {
+        families: families,
+        weight: faceWeight(families[0], parseInt(cs.fontWeight, 10) || 400, cs.fontStyle !== 'normal'),
+        italic: cs.fontStyle !== 'normal',
+        size: px(cs.fontSize),
+        lineHeight: cs.lineHeight === 'normal' ? null : px(cs.lineHeight),
+        letterSpacing: cs.letterSpacing === 'normal' ? 0 : px(cs.letterSpacing),
+        color: parseColor(cs.webkitTextFillColor || cs.color, true) || BLACK,
+        decoration: (inh && inh.deco) || undefined,
+        textCase: tt === 'uppercase' ? 'UPPER' : tt === 'lowercase' ? 'LOWER' : tt === 'capitalize' ? 'TITLE' :
+          /small-caps/.test(cs.fontVariantCaps || '') ? 'SMALL_CAPS' : undefined,
+        href: href && /^(https?:|mailto:)/i.test(href) ? href : undefined,
+        clip: (inh && inh.clip) || undefined
+      };
+    }
+
+    /** Final run sent to Figma (clip-text gradients re-mapped onto the text layer). */
+    function cleanRun(r, box) {
+      const out = {
+        text: r.text, families: r.families, weight: r.weight, italic: r.italic, size: r.size,
+        lineHeight: r.lineHeight === null ? r.size * 1.2 : r.lineHeight, letterSpacing: r.letterSpacing, color: r.color
+      };
+      if (r.decoration) out.decoration = r.decoration;
+      if (r.textCase) out.textCase = r.textCase;
+      if (r.href) out.href = r.href;
+      if (r.clip) out.fills = r.clip.fills.map(function (p) { return remapPaint(p, r.clip.box, box); });
       return out;
     }
 
-    function cssAngleToDegrees(token) {
-      const t = token.toLowerCase().trim();
-      if (t.indexOf('to ') === 0) {
-        if (t.indexOf('right') >= 0 && t.indexOf('top') >= 0) return 45;
-        if (t.indexOf('left') >= 0 && t.indexOf('top') >= 0) return 315;
-        if (t.indexOf('right') >= 0 && t.indexOf('bottom') >= 0) return 135;
-        if (t.indexOf('left') >= 0 && t.indexOf('bottom') >= 0) return 225;
-        if (t.indexOf('right') >= 0) return 90;
-        if (t.indexOf('left') >= 0) return 270;
-        if (t.indexOf('top') >= 0) return 0;
-        return 180;
-      }
-      const deg = t.match(/([\d.-]+)\s*deg/);
-      if (deg) return parseFloat(deg[1]);
-      return 180;
+    function wsMode(ws) {
+      return /^(pre|pre-wrap|break-spaces)$/.test(ws) ? 'pre' : ws === 'pre-line' ? 'line' : 'collapse';
     }
 
-    function parseLinearGradient(bgImage) {
-      if (!bgImage || bgImage === 'none') return null;
-      const start = bgImage.toLowerCase().indexOf('linear-gradient(');
-      if (start < 0) return null;
-      let i = start + 'linear-gradient('.length;
-      let depth = 1;
-      let inner = '';
-      for (; i < bgImage.length; i++) {
-        const ch = bgImage[i];
-        if (ch === '(') depth++;
-        else if (ch === ')') {
-          depth--;
-          if (depth === 0) break;
-        }
-        inner += ch;
+    /** CSS white-space processing for one text node; map[i] = output index of raw char i. */
+    function collapseWs(s, mode) {
+      let out = '';
+      const map = [];
+      for (let i = 0; i < s.length; i++) {
+        map[i] = out.length;
+        let ch = s[i];
+        if (ch === '\r') { if (s[i + 1] === '\n') continue; ch = '\n'; }
+        if (mode === 'pre') out += ch === '\t' ? '    ' : ch; // ponytail: tab = 4 spaces, no tab stops
+        else if (ch === '\n' && mode === 'line') out = out.replace(/ $/, '') + '\n';
+        else if (/[ \t\n\f]/.test(ch)) { if (!/[ \n]$/.test(out)) out += ' '; }
+        else out += ch;
       }
-      if (depth !== 0) return null;
-      const parts = splitTopLevel(inner, ',');
-      if (parts.length < 2) return null;
-      let angleDeg = 180;
-      let stopStart = 0;
-      const first = parts[0].trim().toLowerCase();
-      if (first.indexOf('deg') >= 0 || first.indexOf('to ') === 0) {
-        angleDeg = cssAngleToDegrees(parts[0].trim());
-        stopStart = 1;
-      }
-      const stops = [];
-      for (let s = stopStart; s < parts.length; s++) {
-        const piece = parts[s].trim();
-        const colorMatch = piece.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))/i);
-        if (!colorMatch) continue;
-        const color = parseCssColor(colorMatch[1]);
-        if (!color) continue;
-        const rest = piece.slice(colorMatch[0].length).trim();
-        const pct = rest.match(/([\d.]+)%/);
-        stops.push({
-          position: pct ? parseFloat(pct[1]) / 100 : (stops.length === 0 ? 0 : 1),
-          color: color
-        });
-      }
-      if (stops.length < 2) return null;
-      stops[0].position = 0;
-      stops[stops.length - 1].position = 1;
-      return { angleDeg: angleDeg, stops: stops };
+      map[s.length] = out.length;
+      return { text: out, map: map };
     }
 
-    /** Parse first drop/outer box-shadow into a Figma-like effect. */
-    function parseBoxShadow(css) {
-      if (!css || css === 'none') return null;
-      return splitTopLevel(css, ',').map(function (part) {
-        part = part.trim();
-        const inset = /^inset\b/i.test(part);
-        const colorMatch = part.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})/i);
-        if (!colorMatch) return null;
-        const color = parseCssColor(colorMatch[1]);
-        if (!color) return null;
-        const nums = part
-          .replace(/^inset\b/i, '')
-          .replace(colorMatch[0], '')
-          .trim()
-          .split(/\s+/)
-          .map(function (n) { return parseFloat(n); })
-          .filter(function (n) { return !isNaN(n); });
-        if (nums.length < 2) return null;
-        return {
-          type: inset ? 'INNER_SHADOW' : 'DROP_SHADOW',
-          color: color,
-          offset: { x: nums[0], y: nums[1] },
-          radius: nums[2] || 0,
-          spread: nums[3] || 0
-        };
-      }).filter(Boolean);
+    function textRects(node) {
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      return Array.prototype.filter.call(range.getClientRects(), function (r) { return r.width > 0.1 && r.height > 0.1; });
     }
 
-    function getBorderWidth(style) {
-      const sides = [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth];
-      for (let i = 0; i < sides.length; i++) {
-        const n = parseFloat(sides[i]);
-        if (n > 0) return n;
-      }
-      return 0;
-    }
-
-    function getBorderRadius(style) {
-      const corners = [
-        style.borderTopLeftRadius, style.borderTopRightRadius,
-        style.borderBottomRightRadius, style.borderBottomLeftRadius
-      ];
-      let max = 0;
-      for (let i = 0; i < corners.length; i++) {
-        const n = parseFloat(corners[i]);
-        if (n > max) max = n;
-      }
-      return max;
-    }
-
-    function buildNodeName(el) {
-      const tag = el.tagName.toLowerCase();
-      const id = el.id ? '#' + el.id : '';
-      let className = '';
-      if (typeof el.className === 'string') {
-        className = el.className.trim().split(/\s+/).filter(Boolean).map(function (c) { return '.' + c; }).join('');
-      }
-      return (tag + id + className) || tag;
-    }
-
-    // -------------------------------------------------------------------------
-    // Asset rasterization (SVG / img → PNG bytes for Figma createImage)
-    // -------------------------------------------------------------------------
-
-    function nextImageId() {
-      return 'img_' + Object.keys(imageStore).length + '_' + Math.random().toString(36).slice(2, 7);
-    }
-
-    function dataUrlToRawBase64(dataUrl) {
-      const i = dataUrl.indexOf('base64,');
-      return i >= 0 ? dataUrl.slice(i + 7) : dataUrl;
-    }
-
-    async function rasterizeSvgElement(svgEl, width, height) {
-      const w = Math.max(Math.ceil(width), 1);
-      const h = Math.max(Math.ceil(height), 1);
-      const clone = svgEl.cloneNode(true);
-      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      clone.setAttribute('width', String(w));
-      clone.setAttribute('height', String(h));
-      const win = (svgEl.ownerDocument && svgEl.ownerDocument.defaultView) || window;
-      const cs = win.getComputedStyle(svgEl);
-      if (cs.stroke && cs.stroke !== 'none' && !clone.getAttribute('stroke')) {
-        clone.setAttribute('stroke', cs.stroke);
-      }
-      if (cs.fill && cs.fill !== 'none' && (!clone.getAttribute('fill') || clone.getAttribute('fill') === '')) {
-        clone.setAttribute('fill', cs.fill);
-      }
-      clone.querySelectorAll('path, circle, line, polyline, polygon, rect, ellipse').forEach(function (shape) {
-        if (!shape.getAttribute('stroke') && cs.stroke && cs.stroke !== 'none') {
-          shape.setAttribute('stroke', cs.stroke);
-        }
-        if (!shape.getAttribute('stroke-width') && cs.strokeWidth) {
-          shape.setAttribute('stroke-width', cs.strokeWidth);
-        }
+    function textLines(rects) {
+      const lines = [];
+      rects.slice().sort(function (a, b) { return a.r.top - b.r.top; }).forEach(function (e) {
+        const mid = (e.r.top + e.r.bottom) / 2;
+        const last = lines[lines.length - 1];
+        if (last && mid > last.top && mid < last.bottom) {
+          last.items.push(e);
+          last.top = Math.min(last.top, e.r.top);
+          last.bottom = Math.max(last.bottom, e.r.bottom);
+        } else lines.push({ top: e.r.top, bottom: e.r.bottom, items: [e] });
       });
-      const xml = new XMLSerializer().serializeToString(clone);
-      const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-      return await drawUrlToPngBase64(svgUrl, w, h);
+      return lines;
     }
 
-    async function rasterizeImgElement(imgEl, width, height) {
-      const w = Math.max(Math.ceil(width), 1);
-      const h = Math.max(Math.ceil(height), 1);
-      try {
-        if (imgEl.complete && imgEl.naturalWidth) {
-          return await drawImageToPngBase64(imgEl, w, h);
-        }
-        const src = imgEl.currentSrc || imgEl.src;
-        if (!src) return null;
-        return await drawUrlToPngBase64(src, w, h);
-      } catch (e) {
-        return null;
+    function lastChar(runs) {
+      for (let i = runs.length - 1; i >= 0; i--) {
+        const t = runs[i].text.replace(/\u2060/g, '');
+        if (t) return t.slice(-1);
       }
+      return '\n';
     }
 
-    function drawUrlToPngBase64(url, w, h, scale) {
-      const pixelScale = scale || 2;
-      return new Promise(function (resolve, reject) {
-        const img = new Image();
-        let done = false;
-        const timer = setTimeout(function () {
-          if (done) return;
-          done = true;
-          reject(new Error('image load timed out'));
-        }, 8000);
-        img.onload = async function () {
-          if (done) return;
-          try {
-            const b64 = await drawImageToPngBase64(img, w, h, pixelScale);
-            done = true;
-            clearTimeout(timer);
-            resolve(b64);
-          } catch (e) {
-            done = true;
-            clearTimeout(timer);
-            reject(e);
+    /** Extra advance after the last character so far (a word joiner when there is none). */
+    function addTracking(runs, extra, style) {
+      const last = runs[runs.length - 1];
+      if (!last || /\n$/.test(last.text)) {
+        runs.push(Object.assign({}, style, { text: '\u2060', letterSpacing: extra, h: 0 }));
+        return;
+      }
+      const chars = Array.from(last.text);
+      const ch = chars.pop();
+      if (!chars.length) { last.letterSpacing += extra; return; }
+      last.text = chars.join('');
+      runs.push(Object.assign({}, last, { text: ch, letterSpacing: last.letterSpacing + extra, src: null }));
+    }
+
+    /** One rich text layer for a run of inline content (paragraph, heading, label, button…).
+     *  Returns 'split' when only per-line pieces can be exact. */
+    function richText(seg, host, hcs, alone) {
+      const runs = [];
+      const rects = [];
+      const edges = []; // padded boxes widen the text layer beyond the glyphs
+      let lastRect = null, split = false;
+      seg.items.forEach(function (it) {
+        if (it.kind === 'break') return;
+        if (it.kind === 'pad') {
+          const rs = it.el.getClientRects();
+          const r = it.start ? rs[0] : rs[rs.length - 1];
+          if (r) {
+            if (it.start && lastRect && r.top >= lastRect.bottom - 1) split = true; // wrapped right before this box
+            edges.push(it.start ? r.left - it.margin : r.right + it.margin);
           }
-        };
-        img.onerror = function () {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          reject(new Error('image load failed'));
-        };
-        img.src = url;
+          addTracking(runs, it.px, it.style);
+          return;
+        }
+        const mode = wsMode(it.cs.whiteSpace);
+        if (it.kind === 'br') {
+          const last = runs[runs.length - 1];
+          if (last && mode !== 'pre') last.text = last.text.replace(/ +$/, '');
+          runs.push(Object.assign({}, it.style, { text: '\n' }));
+          return;
+        }
+        const c = collapseWs(it.node.data, mode);
+        let t = c.text, shift = 0;
+        if (mode !== 'pre' && /[ \n]/.test(lastChar(runs)) && t[0] === ' ') { t = t.slice(1); shift = 1; }
+        if (!t) return;
+        const rs = textRects(it.node);
+        const run = Object.assign({}, it.style, { text: t, h: rs.length ? rs[0].height : 0, src: { node: it.node, map: c.map, shift: shift } });
+        runs.push(run);
+        rs.forEach(function (r) { rects.push({ r: r, run: run }); });
+        if (rs.length) lastRect = rs[rs.length - 1];
       });
-    }
-
-    function drawImageToPngBase64(img, w, h, scale) {
-      const pixelScale = scale || 2;
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(Math.round(w * pixelScale), 1);
-      canvas.height = Math.max(Math.round(h * pixelScale), 1);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      return dataUrlToRawBase64(canvas.toDataURL('image/png'));
-    }
-
-    // -------------------------------------------------------------------------
-    // DOM serialize
-    // -------------------------------------------------------------------------
-
-    const SKIP_TAGS = {
-      SCRIPT: true, STYLE: true, LINK: true, META: true, NOSCRIPT: true,
-      HEAD: true, TITLE: true, BR: true, HR: true, TEMPLATE: true,
-      PATH: true, CIRCLE: true, LINE: true, POLYLINE: true, POLYGON: true,
-      RECT: true, ELLIPSE: true, G: true, DEFS: true, USE: true, SYMBOL: true
-    };
-
-    const TEXT_TAGS = {
-      P: true, SPAN: true, H1: true, H2: true, H3: true, H4: true, H5: true, H6: true,
-      A: true, LABEL: true, LI: true, TD: true, TH: true, BUTTON: true,
-      STRONG: true, EM: true, B: true, I: true, SMALL: true, CODE: true,
-      PRE: true, BLOCKQUOTE: true, FIGCAPTION: true, DT: true, DD: true
-    };
-
-    const CONTAINER_TAGS = {
-      DIV: true, SECTION: true, ARTICLE: true, NAV: true, HEADER: true,
-      FOOTER: true, MAIN: true, ASIDE: true, UL: true, OL: true, FORM: true,
-      FIGURE: true, BODY: true, HTML: true
-    };
-
-    function textStyleFrom(style) {
-      const fontSize = parseFloat(style.fontSize) || 12;
-      let lineHeight = parseFloat(style.lineHeight);
-      if (isNaN(lineHeight)) lineHeight = fontSize * 1.2;
-      let letterSpacing = parseFloat(style.letterSpacing);
-      if (isNaN(letterSpacing)) letterSpacing = 0;
-      return {
-        fontFamily: style.fontFamily.split(',')[0].replace(/['"]/g, '').trim(),
-        fontSize: fontSize,
-        fontWeight: style.fontWeight || '400',
-        fontStyle: style.fontStyle || 'normal',
-        lineHeight: lineHeight,
-        letterSpacing: letterSpacing,
-        textAlign: style.textAlign || 'left',
-        textTransform: style.textTransform || 'none',
-        textColor: parseCssColor(style.color)
-      };
-    }
-
-    function applyTextTransform(text, transform) {
-      if (!text) return text;
-      if (transform === 'uppercase') return text.toUpperCase();
-      if (transform === 'lowercase') return text.toLowerCase();
-      if (transform === 'capitalize') {
-        return text.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      if (split) return 'split';
+      // Trailing collapsible spaces and a final <br> don't render.
+      while (runs.length) {
+        const last = runs[runs.length - 1];
+        last.text = last.text.replace(/[ \n]+$/, '');
+        if (last.text) break;
+        runs.pop();
       }
-      return text;
-    }
+      if (!rects.length || !runs.some(function (r) { return /\S/.test(r.text); })) return null;
 
-    function readPseudoContent(el, which, win) {
-      const st = win.getComputedStyle(el, which);
-      if (!st) return null;
-      let content = st.content;
-      if (!content || content === 'none' || content === 'normal') return null;
-      content = content.replace(/^['"]|['"]$/g, '');
-      if (!content || content === 'none' || content === 'open-quote' || content === 'close-quote') return null;
-      return { text: content, style: st };
-    }
-
-    function hasDecorativePseudo(el, win) {
-      const whichs = ['::before', '::after'];
-      for (let i = 0; i < whichs.length; i++) {
-        const st = win.getComputedStyle(el, whichs[i]);
-        if (!st) continue;
-        const content = st.content;
-        if (!content || content === 'none' || content === 'normal') continue;
-        const w = parseFloat(st.width);
-        const h = parseFloat(st.height);
-        const blW = parseFloat(st.borderLeftWidth) || 0;
-        const brW = parseFloat(st.borderRightWidth) || 0;
-        if ((w > 0 && h > 0) || blW > 0 || brW > 0) return true;
-        const bg = st.backgroundColor;
-        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-          if (w > 0 || h > 0) return true;
+      const lines = textLines(rects);
+      const n = lines.length;
+      const pitch = n > 1 ? (lines[n - 1].top - lines[0].top) / (n - 1) : 0;
+      runs.forEach(function (r) { if (r.lineHeight === null) r.lineHeight = pitch || r.h || r.size * 1.2; });
+      // Glyph boxes sit centred in their line box (half-leading), like Figma lays out lines.
+      const lead = function (e) { return (e.run.lineHeight - e.r.height) / 2; };
+      const top = Math.min.apply(null, lines[0].items.map(function (e) { return e.r.top - lead(e); }));
+      const bottom = Math.max.apply(null, lines[n - 1].items.map(function (e) { return e.r.bottom + lead(e); }));
+      const b = boundsOf(rects.map(function (e) { return e.r; }));
+      if (edges.length) {
+        const right = Math.max.apply(null, edges.concat(b.x + b.w));
+        b.x = Math.min.apply(null, edges.concat(b.x));
+        b.w = right - b.x;
+      }
+      const text = runs.map(function (r) { return r.text; }).join('');
+      const align = mapAlign(hcs.textAlign);
+      const node = { type: 'text', x: b.x, y: top, w: b.w, h: bottom - top, align: align };
+      // Single lines never wrap in Figma; wrapped text keeps the browser's line width.
+      node.autoWidth = (n === 1 && text.indexOf('\n') < 0) || /^(pre|nowrap)$/.test(hcs.whiteSpace);
+      // Truncate only where the browser did (Figma's font copy may be a hair wider).
+      const cb = contentBox(host, hcs);
+      const clamp = parseInt(hcs.webkitLineClamp, 10);
+      const clipped = clamp > 0 ? n > clamp
+        : node.autoWidth && hcs.textOverflow === 'ellipsis' && hcs.overflowX !== 'visible' && b.w > cb.w + 0.5;
+      if (clipped) {
+        node.x = cb.x;
+        node.w = cb.w;
+        node.autoWidth = false;
+        node.maxLines = clamp > 0 ? clamp : 1;
+      } else if (!node.autoWidth) {
+        if (!/flex|grid/.test(hcs.display)) {
+          node.x = cb.x;
+          node.w = cb.w;
         }
+        // A hair of slack so Figma's rounding can't wrap a line the browser kept.
+        node.w += 1;
+        node.x -= align === 'CENTER' ? 0.5 : align === 'RIGHT' ? 1 : 0;
+        const indent = px(hcs.textIndent);
+        if (indent && !/flex|grid/.test(hcs.display)) runs.unshift(Object.assign({}, runs[0], { text: '\u2060', letterSpacing: indent, src: null }));
       }
-      return false;
-    }
-
-    function makeTextNode(opts) {
-      return {
-        tag: opts.tag || '#text',
-        name: opts.name || 'text',
-        x: opts.x,
-        y: opts.y,
-        width: Math.max(opts.width, 1),
-        height: Math.max(opts.height, 1),
-        opacity: 1,
-        backgroundColor: null,
-        borderWidth: 0,
-        borderColor: null,
-        borderRadius: 0,
-        isText: true,
-        isImage: false,
-        isSvg: false,
-        text: opts.text,
-        fontFamily: opts.fontFamily,
-        fontSize: opts.fontSize,
-        fontWeight: opts.fontWeight,
-        fontStyle: opts.fontStyle,
-        lineHeight: opts.lineHeight,
-        letterSpacing: opts.letterSpacing || 0,
-        textAlign: opts.textAlign || 'left',
-        textColor: opts.textColor,
-        children: []
-      };
-    }
-
-    async function serializeElement(el, hostRect, win) {
-      if (el.nodeType !== 1) return null;
-      if (SKIP_TAGS[el.tagName]) return null;
-
-      const style = win.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') return null;
-
-      const rect = el.getBoundingClientRect();
-      const textContent = (el.textContent || '').trim();
-      if (rect.width === 0 && rect.height === 0 && !textContent && el.tagName !== 'SVG') return null;
-      if (rect.height < 1 && style.overflow === 'hidden' && parseFloat(style.maxHeight) === 0) return null;
-
-      const x = rect.left - hostRect.left;
-      const y = rect.top - hostRect.top;
-      const width = Math.max(rect.width, 0);
-      const height = Math.max(rect.height, 0);
-
-      const solid = parseCssColor(style.backgroundColor);
-      const gradient = parseLinearGradient(style.backgroundImage);
-      const shadows = parseBoxShadow(style.boxShadow);
-      const borderWidth = getBorderWidth(style);
-      const borderColor = borderWidth > 0 ? parseCssColor(style.borderTopColor) : null;
-      const borderRadius = getBorderRadius(style);
-      const opacity = parseFloat(style.opacity);
-      const overflow = style.overflow;
-      const zIndex = parseInt(style.zIndex, 10);
-
-      const tag = el.tagName.toLowerCase();
-      const isImg = tag === 'img';
-      const isSvg = tag === 'svg';
-
-      const meaningfulKids = Array.prototype.filter.call(el.children, function (c) {
-        return c.nodeType === 1 && !SKIP_TAGS[c.tagName];
-      });
-      const hasElementChildren = !isSvg && meaningfulKids.length > 0;
-
-      const isText =
-        !isImg && !isSvg &&
-        !CONTAINER_TAGS[el.tagName] &&
-        !hasElementChildren &&
-        textContent.length > 0 &&
-        (TEXT_TAGS[el.tagName] || el.children.length === 0) &&
-        !hasDecorativePseudo(el, win);
-
-      const node = {
-        tag: tag,
-        name: buildNodeName(el),
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        opacity: isNaN(opacity) ? 1 : opacity,
-        backgroundColor: solid,
-        gradient: gradient,
-        boxShadows: shadows,
-        borderWidth: borderWidth,
-        borderColor: borderColor,
-        borderRadius: borderRadius,
-        overflow: overflow,
-        zIndex: isNaN(zIndex) ? 0 : zIndex,
-        isText: isText,
-        isImage: isImg,
-        isSvg: isSvg,
-        imageRef: null,
-        children: []
-      };
-
-      if (isText) {
-        let text = textContent;
-        const before = readPseudoContent(el, '::before', win);
-        const after = readPseudoContent(el, '::after', win);
-        if (before) text = before.text + (before.text.length === 1 ? ' ' : '') + text;
-        if (after) text = text + after.text;
-        const ts = textStyleFrom(style);
-        text = applyTextTransform(text, ts.textTransform);
-        node.text = text;
-        node.fontFamily = ts.fontFamily;
-        node.fontSize = ts.fontSize;
-        node.fontWeight = ts.fontWeight;
-        node.fontStyle = ts.fontStyle;
-        node.lineHeight = ts.lineHeight;
-        node.letterSpacing = ts.letterSpacing;
-        node.textAlign = ts.textAlign;
-        node.textColor = ts.textColor;
-        return node;
-      }
-
-      if (isSvg) {
-        try {
-          const png = await rasterizeSvgElement(el, width || 24, height || 24);
-          if (png) {
-            const id = nextImageId();
-            imageStore[id] = png;
-            node.imageRef = id;
-            node.isImage = true;
-            node.isSvg = false;
-            node.name = 'svg';
-            node.backgroundColor = null;
-            node.gradient = null;
-            return node;
-          }
-        } catch (e) { /* fall through to stroke placeholder */ }
-        let stroke = parseCssColor(style.stroke) || parseCssColor(style.color);
-        node.strokeColor = stroke;
-        node.strokeWidth = parseFloat(style.strokeWidth) || 1.5;
-        node.name = 'svg';
-        return node;
-      }
-
-      if (isImg) {
-        node.imageSrc = el.getAttribute('src') || 'image';
-        node.name = 'img:' + (node.imageSrc.split('/').pop() || 'image');
-        try {
-          const png = await rasterizeImgElement(el, width, height);
-          if (png) {
-            const id = nextImageId();
-            imageStore[id] = png;
-            node.imageRef = id;
-          }
-        } catch (e) { /* placeholder fill */ }
-        if (!node.backgroundColor && !node.gradient && !node.imageRef) {
-          node.backgroundColor = { r: 0.93, g: 0.9, b: 0.82, a: 1 };
-        }
-        return node;
-      }
-
-      // Photo blocks / layered gradients: rasterize look so Figma matches the page
-      if (!isText && width >= 8 && height >= 8 && backgroundNeedsRaster(style)) {
-        try {
-          const png = await rasterizeElementLook(el, width, height);
-          if (png) {
-            const id = nextImageId();
-            imageStore[id] = png;
-            // Keep children (tags/overlays) — paint the look as an image sibling behind them
-            node.children.push({
-              tag: 'div',
-              name: 'bg:' + node.name,
-              x: x,
-              y: y,
-              width: width,
-              height: height,
-              opacity: 1,
-              backgroundColor: null,
-              gradient: null,
-              boxShadows: null,
-              borderWidth: 0,
-              borderColor: null,
-              borderRadius: borderRadius,
-              overflow: 'hidden',
-              zIndex: -1,
-              isText: false,
-              isImage: true,
-              isSvg: false,
-              imageRef: id,
-              children: []
-            });
-            node.backgroundColor = null;
-            node.gradient = null;
-          }
-        } catch (e) { /* keep parsed gradient/solid */ }
-      }
-
-      for (let i = 0; i < el.childNodes.length; i++) {
-        const child = el.childNodes[i];
-        if (child.nodeType === 3) {
-          const raw = child.textContent || '';
-          if (!raw.trim()) continue;
-          const range = el.ownerDocument.createRange();
-          range.selectNodeContents(child);
-          const r = range.getBoundingClientRect();
-          if (r.width === 0 && r.height === 0) continue;
-          const ts = textStyleFrom(style);
-          node.children.push(makeTextNode({
-            name: 'text',
-            x: r.left - hostRect.left,
-            y: r.top - hostRect.top,
-            width: r.width,
-            height: Math.max(r.height, ts.fontSize),
-            text: applyTextTransform(raw.replace(/\s+/g, ' '), ts.textTransform),
-            fontFamily: ts.fontFamily,
-            fontSize: ts.fontSize,
-            fontWeight: ts.fontWeight,
-            fontStyle: ts.fontStyle,
-            lineHeight: ts.lineHeight,
-            letterSpacing: ts.letterSpacing,
-            textAlign: ts.textAlign,
-            textColor: ts.textColor
-          }));
-        } else if (child.nodeType === 1) {
-          const c = await serializeElement(child, hostRect, win);
-          if (c) node.children.push(c);
-        }
-      }
-
-      // Decorative bullets / play icons via ::before / ::after
-      appendPseudoBox(node, el, '::before', hostRect, win);
-      appendPseudoBox(node, el, '::after', hostRect, win);
-
-      // Paint order: higher z-index later (on top in Figma)
-      node.children.sort(function (a, b) {
-        return (a.zIndex || 0) - (b.zIndex || 0);
-      });
-
+      if (node.autoWidth && align === 'JUSTIFIED') node.align = 'LEFT';
+      // Alone in its box, the browser's placement shows the anchor (flex / grid centring too).
+      if (node.autoWidth && alone) node.anchor = anchorIn(node, cb, hcs);
+      else if (!node.maxLines && n > 1) node.breaks = lineBreaks(runs);
+      node.runs = runs.map(function (r) { return cleanRun(r, node); });
+      const fx = parseShadows(hcs.textShadow, false);
+      if (fx.length) node.effects = fx;
       return node;
     }
 
-    function appendPseudoBox(node, el, which, hostRect, win) {
-      try {
-        const st = win.getComputedStyle(el, which);
-        if (!st) return;
-        const content = st.content;
-        if (!content || content === 'none' || content === 'normal') return;
-        // Skip quote/text pseudos that are already folded into text nodes
-        const texty = content.replace(/^['"]|['"]$/g, '');
-        if (texty && texty !== 'none' && texty !== 'open-quote' && texty !== 'close-quote' && texty.length > 0) {
-          // Pure text pseudo — already handled for isText nodes
-          if (TEXT_TAGS[el.tagName]) return;
+    /** Where the browser wrapped: offsets (in the joined run text) of each line's first character.
+     *  Figma re-applies them only if its own font metrics would wrap differently. */
+    function lineBreaks(runs) {
+      const out = [];
+      let pos = 0, prevBottom = null;
+      runs.forEach(function (r) {
+        if (r.src) {
+          lineFragments(r.src.node).forEach(function (f) {
+            const at = pos + r.src.map[f.start] - r.src.shift;
+            if (prevBottom !== null && f.y + f.h / 2 > prevBottom && at > 0) out.push(at);
+            prevBottom = f.y + f.h;
+          });
         }
-        const w = parseFloat(st.width);
-        const h = parseFloat(st.height);
-        if (!(w > 0 && h > 0)) return;
-        // Approximate position from parent box + offsets when absolute
-        const parentRect = el.getBoundingClientRect();
-        let px = parentRect.left - hostRect.left;
-        let py = parentRect.top - hostRect.top;
-        if (st.position === 'absolute' || st.position === 'fixed') {
-          const top = parseFloat(st.top);
-          const left = parseFloat(st.left);
-          const right = parseFloat(st.right);
-          const bottom = parseFloat(st.bottom);
-          if (!isNaN(left)) px = parentRect.left - hostRect.left + left;
-          else if (!isNaN(right)) px = parentRect.right - hostRect.left - right - w;
-          if (!isNaN(top)) py = parentRect.top - hostRect.top + top;
-          else if (!isNaN(bottom)) py = parentRect.bottom - hostRect.top - bottom - h;
-          // transform: translate(-50%, -50%) common for play buttons
-          const transform = st.transform;
-          if (transform && transform.indexOf('matrix') >= 0) {
-            const parts = transform.match(/matrix\(([^)]+)\)/);
-            if (parts) {
-              const nums = parts[1].split(',').map(function (n) { return parseFloat(n.trim()); });
-              if (nums.length >= 6) {
-                px += nums[4];
-                py += nums[5];
-              }
-            }
-          }
-        } else {
-          // Inline flex bullets sit at the start of the line box — use a small inset
-          px += 0;
-          py += Math.max((parentRect.height - h) / 2, 0);
-        }
-        const bg = parseCssColor(st.backgroundColor);
-        const borderW = parseFloat(st.borderTopWidth) || 0;
-        // CSS triangle via borders (play icon)
-        const blW = parseFloat(st.borderLeftWidth) || 0;
-        const btW = parseFloat(st.borderTopWidth) || 0;
-        const bbW = parseFloat(st.borderBottomWidth) || 0;
-        const brW = parseFloat(st.borderRightWidth) || 0;
-        const isTriangle = (w === 0 || h === 0 || (parseFloat(st.width) === 0)) && (blW > 0 || brW > 0);
-        let fill = bg;
-        let boxW = w;
-        let boxH = h;
-        if (isTriangle || (parseFloat(st.width) === 0 && blW > 0)) {
-          fill = parseCssColor(st.borderLeftColor) || parseCssColor(st.borderTopColor) || bg;
-          boxW = blW || brW || 8;
-          boxH = (btW + bbW) || 12;
-          // For zero-size border triangles, width/height from getComputedStyle may be 0
-          if (!(w > 0)) {
-            /* keep boxW/boxH from borders */
-          } else {
-            boxW = Math.max(w, boxW);
-            boxH = Math.max(h, boxH);
-          }
-        }
-        if (!fill && borderW <= 0 && !isTriangle) return;
-        if (!(boxW > 0 && boxH > 0)) return;
-        const radius = parseFloat(st.borderTopLeftRadius) || 0;
-        node.children.push({
-          tag: 'pseudo',
-          name: which,
-          x: px,
-          y: py,
-          width: boxW,
-          height: boxH,
-          opacity: 1,
-          backgroundColor: fill,
-          gradient: null,
-          boxShadows: null,
-          borderWidth: (!isTriangle && borderW > 0) ? borderW : 0,
-          borderColor: borderW > 0 ? parseCssColor(st.borderTopColor) : null,
-          borderRadius: radius,
-          overflow: 'visible',
-          zIndex: 1,
-          isText: false,
-          isImage: false,
-          isSvg: false,
-          imageRef: null,
-          children: []
-        });
-      } catch (e) { /* ignore */ }
+        pos += r.text.length;
+      });
+      return out;
     }
 
-    function prepareDomForCapture(root) {
-      root.querySelectorAll('.faq-a, details').forEach(function (el) {
-        if (el.tagName === 'DETAILS') { el.open = true; return; }
-        el.style.maxHeight = 'none';
-        el.style.overflow = 'visible';
+    /** Which edge a single line should keep if Figma draws it a bit wider or narrower. */
+    function anchorIn(b, cb, cs) {
+      const left = b.x - cb.x, right = cb.x + cb.w - (b.x + b.w);
+      if (cb.w - b.w <= 2) { // shrink-wrapped (buttons, pills): keep symmetric padding symmetric
+        const pad = px(cs.paddingLeft) + px(cs.borderLeftWidth) - px(cs.paddingRight) - px(cs.borderRightWidth);
+        return Math.abs(pad) < 1 ? 'CENTER' : 'LEFT';
+      }
+      if (Math.abs(left - right) < 1.5) return 'CENTER';
+      return right < 1 && left > 1 ? 'RIGHT' : 'LEFT';
+    }
+
+    /** Split a text node into per-line pieces using word boxes. */
+    function lineFragments(textNode) {
+      const out = [];
+      const range = doc.createRange();
+      const re = /\S+/g;
+      let m, cur = null;
+      while ((m = re.exec(textNode.data))) {
+        range.setStart(textNode, m.index);
+        range.setEnd(textNode, m.index + m[0].length);
+        const r = range.getClientRects()[0];
+        if (!r || !r.width) continue;
+        if (cur && r.top < cur.y + cur.h - 1 && r.bottom > cur.y + 1 && r.left >= cur.x + cur.w - 1) {
+          cur.end = m.index + m[0].length;
+          cur.w = r.right - cur.x;
+        } else {
+          cur = { start: m.index, end: m.index + m[0].length, x: r.left, y: r.top, w: r.width, h: r.height };
+          out.push(cur);
+        }
+      }
+      const data = textNode.data;
+      return out.map(function (f) {
+        return {
+          text: data.slice(f.start, f.end), start: f.start, x: f.x, y: f.y, w: f.w, h: f.h,
+          spaceBefore: /\s/.test(data.charAt(f.start - 1)), spaceAfter: /\s/.test(data.charAt(f.end))
+        };
       });
-      root.querySelectorAll('.faq-item').forEach(function (el) {
-        el.classList.add('open');
+    }
+
+    /** Text mixed with inline-blocks / padded inline boxes: one exact layer per line,
+     *  split only where such a box sits between the words. */
+    function fragmentTexts(seg, hcs) {
+      const groups = [];
+      let open = null;
+      seg.items.forEach(function (it) {
+        if (it.kind !== 'text') { open = null; return; } // <br>, inline-block, padded box
+        const mode = wsMode(it.cs.whiteSpace);
+        lineFragments(it.node).forEach(function (f, i) {
+          const text = collapseWs(f.text, mode).text;
+          const lh = it.style.lineHeight === null ? f.h : it.style.lineHeight;
+          const top = f.y - (lh - f.h) / 2;
+          const run = Object.assign({}, it.style, { text: text, lineHeight: lh });
+          const mid = f.y + f.h / 2;
+          if (open && i === 0 && mid > open.top && mid < open.bottom) {
+            if (open.spaceAfter || f.spaceBefore) open.runs[open.runs.length - 1].text += ' ';
+            open.runs.push(run);
+            open.w = f.x + f.w - open.x;
+            open.h = Math.max(open.y + open.h, top + lh) - Math.min(open.y, top);
+            open.y = Math.min(open.y, top);
+          } else {
+            open = { x: f.x, y: top, w: f.w, h: lh, top: f.y, bottom: f.y + f.h, runs: [run] };
+            groups.push(open);
+          }
+          open.spaceAfter = f.spaceAfter;
+        });
       });
+      const fx = parseShadows(hcs.textShadow, false);
+      return groups.map(function (g) {
+        const node = { type: 'text', x: g.x, y: g.y, w: g.w, h: g.h, align: 'LEFT', autoWidth: true };
+        node.runs = g.runs.map(function (r) { return cleanRun(r, node); });
+        if (fx.length) node.effects = fx;
+        return node;
+      });
+    }
+
+    function isIconSeg(seg) {
+      let any = false;
+      const all = seg.items.every(function (it) {
+        const t = it.kind === 'text' ? it.node.data.trim() : '';
+        if (!t) return true;
+        any = true;
+        return ICON_FONT.test(it.style.families[0] || '') || /^[-]+$/.test(t);
+      });
+      return any && all;
+    }
+
+    /** Icon-font glyphs (Font Awesome, Material Symbols…): Figma won't have the font, so draw them. */
+    function iconNode(seg) {
+      const parts = [];
+      seg.items.forEach(function (it) {
+        const r = it.kind === 'text' && /\S/.test(it.node.data) && textRects(it.node)[0];
+        if (r) parts.push({ it: it, r: r });
+      });
+      if (!parts.length) return null;
+      const b = boundsOf(parts.map(function (p) { return p.r; }));
+      const c = doc.createElement('canvas'); // the page's canvas can use its web fonts
+      c.width = Math.max(1, Math.ceil(b.w * 4));
+      c.height = Math.max(1, Math.ceil(b.h * 4));
+      const ctx = c.getContext('2d');
+      ctx.scale(4, 4);
+      parts.forEach(function (p) {
+        const cs = p.it.cs;
+        const text = p.it.node.data.trim();
+        ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+        ctx.fillStyle = cs.webkitTextFillColor || cs.color;
+        ctx.fillText(text, p.r.left - b.x, p.r.top - b.y + ctx.measureText(text).fontBoundingBoxAscent);
+      });
+      const id = storeImage(canvasB64(c));
+      return id ? { type: 'frame', name: 'icon', x: b.x, y: b.y, w: b.w, h: b.h, fills: [imagePaint(id)], children: [] } : null;
+    }
+
+    // -------------------------------------------------------------------------
+    // Pseudo-elements, list markers
+    // -------------------------------------------------------------------------
+
+    function unescapeCss(s) {
+      return s.replace(/\\([0-9a-f]{1,6})\s?|\\([\s\S])/gi, function (_, hexCode, ch) {
+        return hexCode ? String.fromCodePoint(parseInt(hexCode, 16)) : ch;
+      });
+    }
+
+    function formatCounter(n, type) {
+      if (/leading-zero/.test(type)) return String(n).padStart(2, '0');
+      if (/roman/.test(type)) {
+        let r = '', v = n;
+        [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'],
+          [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']].forEach(function (p) { while (v >= p[0]) { r += p[1]; v -= p[0]; } });
+        return /upper/.test(type) ? r.toUpperCase() : r;
+      }
+      if (/alpha|latin/.test(type)) {
+        const c = String.fromCharCode(97 + (n - 1) % 26);
+        return /upper/.test(type) ? c.toUpperCase() : c;
+      }
+      return String(n);
+    }
+
+    /** Computed `content` → text (strings, attr(), counters, quotes) or an image url. */
+    function resolveContent(content, el) {
+      let text = '', img = null, m;
+      const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([\w-]+)\s*\)|counters?\(([^)]*)\)|(open|close)-quote|url\(\s*["']?([^"')]*)["']?\s*\)/g;
+      const main = splitTopLevel(content, '/')[0] || ''; // drop "/ alt text"
+      while ((m = re.exec(main))) {
+        if (m[1] !== undefined || m[2] !== undefined) text += unescapeCss(m[1] !== undefined ? m[1] : m[2]);
+        else if (m[3]) text += el.getAttribute(m[3]) || '';
+        else if (m[4] !== undefined) {
+          // ponytail: counter value = position among same-looking siblings; counter-reset/increment amounts ignored.
+          let n = 1;
+          for (let s = el.previousElementSibling; s; s = s.previousElementSibling) {
+            if (s.tagName === el.tagName && s.className === el.className) n++;
+          }
+          text += formatCounter(n, m[4].split(',').slice(1).map(function (a) { return a.trim(); })
+            .filter(function (a) { return !/^["']/.test(a); })[0] || 'decimal');
+        } else if (m[5]) text += m[5] === 'open' ? '“' : '”';
+        else if (m[6]) img = m[6];
+      }
+      return { text: text, img: img };
+    }
+
+    /** Turn ::before/::after into real elements (all computed styles copied) so the
+     *  browser lays them out and we can measure them like any other box. */
+    function materializePseudos(el) {
+      const made = [];
+      ['::before', '::after'].forEach(function (which) {
+        const ps = win.getComputedStyle(el, which);
+        if (!ps || !ps.content || ps.content === 'none' || ps.content === 'normal' || ps.display === 'none') return;
+        const c = resolveContent(ps.content, el);
+        if (!c.text && !c.img && !hasBoxLook(ps)) return; // clearfix / spacer: nothing to draw
+        const p = doc.createElement(c.img ? 'img' : 'h2f-pseudo');
+        let css = '';
+        for (let i = 0; i < ps.length; i++) css += ps[i] + ':' + ps.getPropertyValue(ps[i]) + ';';
+        p.style.cssText = css + 'animation:none!important;transition:none!important;content:normal;';
+        p.setAttribute('data-h2f-name', which);
+        if (c.img) p.src = c.img;
+        else p.textContent = c.text;
+        made.push([which, p]);
+      });
+      if (!made.length) return function () {};
+      el.setAttribute('data-h2f', made.map(function (m) { return m[0] === '::before' ? 'b' : 'a'; }).join(' '));
+      made.forEach(function (m) {
+        if (m[0] === '::before') el.insertBefore(m[1], el.firstChild);
+        else el.appendChild(m[1]);
+      });
+      return function () {
+        made.forEach(function (m) { m[1].remove(); });
+        el.removeAttribute('data-h2f');
+      };
+    }
+
+    function firstTextRect(el) {
+      const tw = doc.createTreeWalker(el, 4 /* SHOW_TEXT */);
+      for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+        const r = /\S/.test(t.data) && textRects(t)[0];
+        if (r) return r;
+      }
+      return null;
+    }
+
+    const MARKER_GLYPHS = { disc: '•', circle: '◦', square: '▪', 'disclosure-open': '▾', 'disclosure-closed': '▸' };
+
+    function listMarker(el, cs, node) {
+      const type = cs.listStyleType;
+      if (cs.display !== 'list-item' || !type || type === 'none' || cs.listStyleImage !== 'none') return;
+      let n = el.parentElement && el.parentElement.tagName === 'OL' ? el.parentElement.start : 1;
+      for (let s = el.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === el.tagName) n++;
+      const text = MARKER_GLYPHS[type] || (/^["']/.test(type) ? unescapeCss(type.slice(1, -1)) : formatCounter(n, type) + '.');
+      const ms = win.getComputedStyle(el, '::marker');
+      const st = runStyle(ms && ms.fontSize ? ms : cs, el, null);
+      const first = firstTextRect(el);
+      const lh = st.lineHeight === null ? (first ? first.height : st.size * 1.2) : st.lineHeight;
+      const cb = contentBox(el, cs);
+      const inside = cs.listStylePosition === 'inside';
+      const w = st.size * 4;
+      // Outside markers end ~one space before the content edge.
+      const m = {
+        type: 'text', x: inside ? cb.x : cb.x - w - st.size * 0.3, y: first ? first.top - (lh - first.height) / 2 : cb.y,
+        w: w, h: lh, align: inside ? 'LEFT' : 'RIGHT', autoWidth: false
+      };
+      m.runs = [cleanRun(Object.assign({}, st, { text: text, lineHeight: lh, decoration: undefined, href: undefined }), m)];
+      node.children.push(m);
+    }
+
+    // -------------------------------------------------------------------------
+    // SVG + native form controls
+    // -------------------------------------------------------------------------
+
+    function svgDoc(w, h, body) {
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + body + '</svg>';
+    }
+
+    function svgChild(markup, box, name) {
+      return { type: 'svg', name: name, x: box.x, y: box.y, w: box.w, h: box.h, svg: markup };
+    }
+
+    const SVG_PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap',
+      'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit', 'opacity', 'stop-color', 'stop-opacity',
+      'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline', 'visibility'];
+    const SVG_DEFAULTS = {
+      'fill-opacity': '1', 'fill-rule': 'nonzero', stroke: 'none', 'stroke-width': '1px', 'stroke-opacity': '1',
+      'stroke-linecap': 'butt', 'stroke-linejoin': 'miter', 'stroke-dasharray': 'none', 'stroke-dashoffset': '0px',
+      'stroke-miterlimit': '4', opacity: '1', 'stop-opacity': '1', 'font-style': 'normal', 'text-anchor': 'start',
+      'dominant-baseline': 'auto', visibility: 'visible'
+    };
+
+    /** Inline SVG → standalone markup Figma can import as vectors: computed styles
+     *  (classes, currentColor) baked into attributes, <use>/external defs resolved. */
+    function svgMarkup(svg, w, h) {
+      const clone = svg.cloneNode(true);
+      const src = [svg].concat(Array.prototype.slice.call(svg.querySelectorAll('*')));
+      const dst = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*')));
+      src.forEach(function (s, i) {
+        const d = dst[i], tag = s.tagName.toLowerCase();
+        if (tag === 'style' || tag === 'script') { d.remove(); return; }
+        const c = win.getComputedStyle(s);
+        const text = /^(text|tspan|textpath)$/.test(tag);
+        SVG_PROPS.forEach(function (p) {
+          if (/^(font|text|dominant)/.test(p) && !text) return;
+          if (/^stop/.test(p) && tag !== 'stop') return;
+          const v = c.getPropertyValue(p);
+          if (!v || v === SVG_DEFAULTS[p]) return;
+          d.setAttribute(p, v.replace(/url\("?[^"#)]*(#[^")]+)"?\)/g, 'url($1)').replace(/(\d)px\b/g, '$1'));
+        });
+        if (tag === 'use') d.setAttribute('data-h2f-color', c.color);
+      });
+
+      // <use href="#id"> → inline copy (sprites often live in another <svg> on the page).
+      Array.prototype.forEach.call(clone.querySelectorAll('use'), function (u) {
+        const id = (u.getAttribute('href') || u.getAttribute('xlink:href') || '').replace(/^#/, '');
+        const ref = id && (clone.querySelector('[id="' + CSS.escape(id) + '"]') || doc.getElementById(id));
+        if (!ref) return;
+        const symbol = ref.tagName.toLowerCase() === 'symbol';
+        const g = doc.createElementNS(SVG_NS, symbol ? 'svg' : 'g');
+        Array.prototype.forEach.call(u.attributes, function (a) {
+          if (!/^((xlink:)?href|x|y|width|height|id|data-h2f-color)$/.test(a.name)) g.setAttribute(a.name, a.value);
+        });
+        const x = u.getAttribute('x') || '0', y = u.getAttribute('y') || '0';
+        if (symbol) {
+          // The symbol's own attributes (fill="none", stroke…) beat what <use> passes down.
+          Array.prototype.forEach.call(ref.attributes, function (a) { if (a.name !== 'id') g.setAttribute(a.name, a.value); });
+          g.setAttribute('x', x);
+          g.setAttribute('y', y);
+          g.setAttribute('width', u.getAttribute('width') || '100%');
+          g.setAttribute('height', u.getAttribute('height') || '100%');
+          Array.prototype.forEach.call(ref.childNodes, function (n) { g.appendChild(n.cloneNode(true)); });
+        } else {
+          g.setAttribute('transform', 'translate(' + x + ' ' + y + ')' + (u.getAttribute('transform') ? ' ' + u.getAttribute('transform') : ''));
+          const copy = ref.cloneNode(true);
+          copy.removeAttribute('id');
+          g.appendChild(copy);
+        }
+        const color = u.getAttribute('data-h2f-color');
+        [g].concat(Array.prototype.slice.call(g.querySelectorAll('*'))).forEach(function (n) {
+          ['fill', 'stroke'].forEach(function (a) { if (/^currentcolor$/i.test(n.getAttribute(a) || '')) n.setAttribute(a, color); });
+        });
+        u.replaceWith(g);
+      });
+
+      // Gradients / clip paths referenced from elsewhere in the page.
+      const ids = new Set();
+      [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*'))).forEach(function (n) {
+        Array.prototype.forEach.call(n.attributes, function (a) {
+          const re = /url\(#([^)]+)\)/g;
+          let m;
+          while ((m = re.exec(a.value))) ids.add(m[1]);
+          if (/href$/.test(a.name) && a.value[0] === '#') ids.add(a.value.slice(1));
+        });
+      });
+      let defs = null;
+      ids.forEach(function (id) {
+        if (clone.querySelector('[id="' + CSS.escape(id) + '"]')) return;
+        const ref = doc.getElementById(id);
+        if (!ref) return;
+        defs = defs || clone.insertBefore(doc.createElementNS(SVG_NS, 'defs'), clone.firstChild);
+        defs.appendChild(ref.cloneNode(true)); // ponytail: one level; refs inside refs aren't followed
+      });
+
+      clone.setAttribute('width', String(w));
+      clone.setAttribute('height', String(h));
+      return new XMLSerializer().serializeToString(clone);
+    }
+
+    /** <img src="….svg"> / data: SVG → markup, so it imports as vectors too. */
+    async function svgFromUrl(src, w, h, fit) {
+      let text = null;
+      try {
+        if (/^data:/i.test(src)) {
+          const i = src.indexOf(',');
+          const data = src.slice(i + 1);
+          text = /;base64/i.test(src.slice(0, i))
+            ? new TextDecoder().decode(Uint8Array.from(atob(data), function (c) { return c.charCodeAt(0); }))
+            : decodeURIComponent(data);
+        } else {
+          const res = await fetch(src);
+          if (res.ok) text = await res.text();
+        }
+      } catch (e) {
+        return null;
+      }
+      if (!text) return null;
+      const svg = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+      if (!svg || svg.nodeName.toLowerCase() !== 'svg' || svg.querySelector('parsererror')) return null;
+      const sw = px(svg.getAttribute('width')), sh = px(svg.getAttribute('height'));
+      if (!svg.getAttribute('viewBox') && sw && sh) svg.setAttribute('viewBox', '0 0 ' + sw + ' ' + sh);
+      svg.setAttribute('width', String(w));
+      svg.setAttribute('height', String(h));
+      if (fit === 'cover') svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+      return new XMLSerializer().serializeToString(svg);
+    }
+
+    function checkSvg(w, h, type, on, accent) {
+      const s = Math.min(w, h), x = (w - s) / 2, y = (h - s) / 2, a = hex(accent);
+      if (type === 'radio') {
+        const c = 'cx="' + w / 2 + '" cy="' + h / 2 + '"';
+        return svgDoc(w, h, '<circle ' + c + ' r="' + (s / 2 - 0.5) + '" fill="#fff" stroke="' + (on ? a : '#767676') + '"/>' +
+          (on ? '<circle ' + c + ' r="' + s * 0.28 + '" fill="' + a + '"/>' : ''));
+      }
+      return svgDoc(w, h, '<rect x="' + (x + 0.5) + '" y="' + (y + 0.5) + '" width="' + (s - 1) + '" height="' + (s - 1) +
+        '" rx="' + s * 0.2 + '" fill="' + (on ? a : '#fff') + '" stroke="' + (on ? a : '#767676') + '"/>' +
+        (on ? '<path d="M' + (x + s * 0.24) + ' ' + (y + s * 0.52) + 'L' + (x + s * 0.43) + ' ' + (y + s * 0.7) + 'L' +
+          (x + s * 0.77) + ' ' + (y + s * 0.32) + '" fill="none" stroke="#fff" stroke-width="' + Math.max(1.5, s * 0.14) +
+          '" stroke-linecap="round" stroke-linejoin="round"/>' : ''));
+    }
+
+    function barSvg(w, h, p, slider, color) {
+      const c = hex(color);
+      if (slider) {
+        const r = Math.min(8, h / 2), cx = r + (w - 2 * r) * p, ty = h / 2 - 2;
+        return svgDoc(w, h, '<rect y="' + ty + '" width="' + w + '" height="4" rx="2" fill="#efefef" stroke="#b2b2b2" stroke-width="0.5"/>' +
+          '<rect y="' + ty + '" width="' + cx + '" height="4" rx="2" fill="' + c + '"/>' +
+          '<circle cx="' + cx + '" cy="' + h / 2 + '" r="' + r + '" fill="' + c + '"/>');
+      }
+      return svgDoc(w, h, '<rect width="' + w + '" height="' + h + '" rx="' + h / 2 + '" fill="#efefef" stroke="#b2b2b2" stroke-width="0.5"/>' +
+        '<rect width="' + w * p + '" height="' + h + '" rx="' + h / 2 + '" fill="' + c + '"/>');
+    }
+
+    function controlText(el, cs, text, color, multiline) {
+      const cb = contentBox(el, cs);
+      const st = runStyle(cs, el, null);
+      const lh = st.lineHeight === null ? st.size * 1.2 : st.lineHeight;
+      const node = {
+        type: 'text', x: cb.x, y: multiline ? cb.y : cb.y + (cb.h - lh) / 2, w: Math.max(cb.w, 1),
+        h: multiline ? cb.h : lh, align: mapAlign(cs.textAlign), autoWidth: false
+      };
+      if (!multiline) node.maxLines = 1;
+      node.runs = [cleanRun(Object.assign({}, st, { text: text, lineHeight: lh, color: color || st.color }), node)];
+      return node;
+    }
+
+    /** Inputs, selects, checkboxes, sliders: their value / placeholder and native look. */
+    function formControl(el, cs, node, box, tag) {
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      const native = cs.appearance !== 'none';
+      const accent = parseColor(cs.accentColor) || ACCENT;
+      if (tag === 'INPUT' && (type === 'checkbox' || type === 'radio')) {
+        if (!native) return;
+        node.fills = [];
+        node.stroke = null;
+        node.children.push(svgChild(checkSvg(box.w, box.h, type, el.checked, accent), box, type));
+        return;
+      }
+      if ((tag === 'INPUT' && type === 'range') || tag === 'PROGRESS' || tag === 'METER') {
+        const min = tag === 'PROGRESS' ? 0 : px(el.min);
+        const max = el.max === '' ? 100 : px(el.max) || 1;
+        const v = tag === 'INPUT' ? el.valueAsNumber : el.value;
+        const p = Math.max(0, Math.min(1, (v - min) / ((max - min) || 1)));
+        node.fills = [];
+        node.stroke = null;
+        node.children.push(svgChild(barSvg(box.w, box.h, p, tag === 'INPUT',
+          tag === 'METER' ? { r: 0.16, g: 0.63, b: 0.26, a: 1 } : accent), box, tag.toLowerCase()));
+        return;
+      }
+      if (tag === 'INPUT' && type === 'color') {
+        const c = parseColor(el.value);
+        const cb = contentBox(el, cs);
+        if (c) node.children.push({ type: 'frame', name: 'swatch', x: cb.x, y: cb.y, w: cb.w, h: cb.h, fills: [solidPaint(c)], children: [] });
+        return;
+      }
+      if (tag === 'INPUT' && /^(hidden|file|image)$/.test(type)) return;
+      let text = '', color = null;
+      if (tag === 'SELECT') {
+        const o = el.selectedOptions && el.selectedOptions[0];
+        text = o ? o.text : '';
+      } else if (/^(submit|button|reset)$/.test(type)) {
+        text = el.value || (type === 'submit' ? 'Submit' : type === 'reset' ? 'Reset' : '');
+      } else {
+        text = type === 'password' ? '•'.repeat(el.value.length) : el.value;
+        if (!text && el.placeholder) {
+          text = el.placeholder;
+          color = parseColor(win.getComputedStyle(el, '::placeholder').color) || { r: 0.46, g: 0.46, b: 0.46, a: 1 };
+        }
+      }
+      if (text) node.children.push(controlText(el, cs, text, color, tag === 'TEXTAREA'));
+      if (tag === 'SELECT' && native) {
+        const s = Math.min(10, box.h * 0.35);
+        const col = hex(parseColor(cs.color) || BLACK);
+        node.children.push(svgChild(svgDoc(s, s, '<path d="M' + s * 0.15 + ' ' + s * 0.35 + 'L' + s / 2 + ' ' + s * 0.7 + 'L' + s * 0.85 + ' ' + s * 0.35 +
+          '" fill="none" stroke="' + col + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'),
+          { x: box.x + box.w - px(cs.borderRightWidth) - s - 6, y: box.y + (box.h - s) / 2, w: s, h: s }, 'chevron'));
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Replaced elements
+    // -------------------------------------------------------------------------
+
+    async function imgContent(el, cs, node, box) {
+      const src = el.currentSrc || el.src || '';
+      if (el.alt) node.name = 'img "' + el.alt.slice(0, 40) + '"';
+      if (!src) return;
+      if (/^data:image\/svg\+xml|\.svg(\?|#|$)/i.test(src)) {
+        const cb = contentBox(el, cs);
+        const markup = await svgFromUrl(src, cb.w, cb.h, cs.objectFit);
+        if (markup) { node.children.push(svgChild(markup, cb, 'svg')); return; }
+      }
+      let b64 = el.complete && el.naturalWidth ? drawReplaced(el, el.naturalWidth, el.naturalHeight, box, cs) : null;
+      if (!b64) {
+        const img = await loadImage(src); // retry with CORS so the canvas stays readable
+        if (img) b64 = drawReplaced(img, img.naturalWidth, img.naturalHeight, box, cs);
+      }
+      const paint = imagePaintOrNull(b64);
+      if (paint) node.fills.push(paint);
+      else if (/^https?:/i.test(src)) node.fills.push({ type: 'IMAGE', scaleMode: cs.objectFit === 'contain' ? 'FIT' : 'FILL', url: src });
+      else {
+        node.fills.push(solidPaint({ r: 0, g: 0, b: 0, a: 0.06 }));
+        node.name += ' (not loaded)';
+      }
+    }
+
+    async function mediaContent(el, cs, node, box, tag) {
+      let b64 = null;
+      if (tag === 'CANVAS') b64 = drawReplaced(el, el.width, el.height, box, cs);
+      if (tag === 'VIDEO') {
+        if (el.readyState >= 2) b64 = drawReplaced(el, el.videoWidth, el.videoHeight, box, cs);
+        if (!b64 && el.poster) {
+          const img = await loadImage(el.poster);
+          if (img) b64 = drawReplaced(img, img.naturalWidth, img.naturalHeight, box, cs);
+        }
+      }
+      const paint = imagePaintOrNull(b64);
+      node.fills.push(paint || solidPaint(tag === 'VIDEO' ? BLACK : { r: 0.94, g: 0.94, b: 0.94, a: 1 }));
+    }
+
+    // -------------------------------------------------------------------------
+    // DOM → tree
+    // -------------------------------------------------------------------------
+
+    function layerName(el) {
+      const named = el.getAttribute('data-h2f-name');
+      if (named) return named;
+      const tag = el.tagName.toLowerCase();
+      if (el.id) return tag + '#' + el.id;
+      const cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/)
+        .filter(function (c) { return c && !/[:[\]/()!@]/.test(c); }).slice(0, 2);
+      const label = el.getAttribute('aria-label');
+      return tag + cls.map(function (c) { return '.' + c; }).join('') + (label ? ' – ' + label.slice(0, 40) : '');
+    }
+
+    /** Paint order among siblings: negative z < in-flow < positioned < positive z. */
+    function zKey(el, cs) {
+      const positioned = cs.position !== 'static';
+      const z = parseInt(cs.zIndex, 10);
+      const parent = el.parentElement;
+      const item = parent && /flex|grid/.test(win.getComputedStyle(parent).display);
+      if ((positioned || item) && z) return z > 0 ? z + 1 : z - 1;
+      return positioned ? 0.5 : 0;
+    }
+
+    function finalize(node) {
+      const look = node.fills.length || node.stroke || node.effects.length;
+      if (!look && !node.children.length) return null;
+      const only = node.children.length === 1 && node.children[0];
+      if (!look && !node.clip && !node.transform && only && only.type === 'text') {
+        // A plain text holder (h1, p, span…) is just its text layer.
+        if (node.opacity !== undefined) only.opacity = node.opacity * (only.opacity === undefined ? 1 : only.opacity);
+        if (node.blend) only.blend = node.blend;
+        only.z = node.z;
+        return only;
+      }
+      return node;
+    }
+
+    async function serializeElement(el, deco) {
+      const tag = el.tagName.toUpperCase();
+      if (SKIP_TAGS.has(tag)) return null;
+      const cs = win.getComputedStyle(el);
+      if (cs.display === 'none') return null;
+      const tf = readTransform(el, cs);
+      if (!tf) return serializeBox(el, cs, tag, null, deco);
+      // Measure the untransformed box; Figma re-applies the rotation / scale exactly.
+      const saved = el.getAttribute('style');
+      ['transform', 'rotate', 'scale', 'translate', 'transition'].forEach(function (p) { el.style.setProperty(p, 'none', 'important'); });
+      try {
+        return await serializeBox(el, cs, tag, tf, deco);
+      } finally {
+        if (saved === null) el.removeAttribute('style');
+        else el.setAttribute('style', saved);
+      }
+    }
+
+    async function serializeBox(el, cs, tag, tf, deco) {
+      if (!el.getClientRects().length) return null; // not rendered (closed <details>…)
+      const r0 = el.getBoundingClientRect();
+      if (r0.width <= 1.5 && r0.height <= 1.5 && (cs.overflowX !== 'visible' || cs.clip !== 'auto')) return null; // sr-only
+      if (cs.clipPath === 'inset(50%)') return null;
+      const cleanup = REPLACED.has(tag) ? function () {} : materializePseudos(el);
+      try {
+        const box = rectOf(el.getBoundingClientRect());
+        const node = { type: 'frame', name: layerName(el), x: box.x, y: box.y, w: box.w, h: box.h, fills: [], effects: [], children: [] };
+        const isBody = el === doc.body;
+        let clipFill = null;
+        if (cs.visibility !== 'hidden') {
+          const bg = isBody && bodyBgOnCanvas ? [] : await backgroundPaints(el, cs, box);
+          if (isClipText(cs)) clipFill = { fills: bg, box: box };
+          else node.fills = bg;
+          const b = readBorders(cs, box);
+          if (b && b.stroke) node.stroke = b.stroke;
+          else if (b) node.children.push({ type: 'svg', name: 'border', x: box.x, y: box.y, w: box.w, h: box.h, svg: b.svg, z: -1e9 });
+          node.radius = readRadii(cs, box.w, box.h);
+          node.effects = readEffects(cs, REPLACED.has(tag));
+        }
+        const op = parseFloat(cs.opacity);
+        if (op < 1) node.opacity = op;
+        if (cs.mixBlendMode && cs.mixBlendMode !== 'normal') node.blend = cs.mixBlendMode.toUpperCase().replace(/-/g, '_');
+        node.clip = !isBody && (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || /^(INPUT|SELECT|TEXTAREA)$/.test(tag));
+        if (tf) node.transform = tf;
+
+        if (tag === 'SVG') {
+          if (box.w < 0.5 || box.h < 0.5) return null;
+          const markup = svgMarkup(el, box.w, box.h);
+          if (/<foreignObject/i.test(markup)) { // HTML inside SVG: Figma can't import it, raster instead
+            node.fills = [imagePaintOrNull(await drawUrl('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup), box.w, box.h))].filter(Boolean);
+            node.z = zKey(el, cs);
+            return finalize(node);
+          }
+          return {
+            type: 'svg', name: el.getAttribute('aria-label') || 'svg', x: box.x, y: box.y, w: box.w, h: box.h, svg: markup,
+            opacity: node.opacity, blend: node.blend, effects: node.effects, transform: node.transform,
+            clip: cs.overflowX !== 'visible', z: zKey(el, cs)
+          };
+        }
+        if (tag === 'IMG') await imgContent(el, cs, node, box);
+        else if (tag === 'CANVAS' || tag === 'VIDEO') await mediaContent(el, cs, node, box, tag);
+        else if (/^(IFRAME|EMBED|OBJECT|AUDIO)$/.test(tag)) node.fills.push(solidPaint({ r: 0.94, g: 0.94, b: 0.94, a: 1 }));
+        else if (REPLACED.has(tag)) formControl(el, cs, node, box, tag);
+        else await serializeContent(el, cs, node, clipFill, decoLine(cs) || deco);
+        if (cs.visibility !== 'hidden') listMarker(el, cs, node);
+        node.children.sort(function (a, b) { return (a.z || 0) - (b.z || 0); });
+        node.z = zKey(el, cs);
+        return finalize(node);
+      } finally {
+        cleanup();
+      }
+    }
+
+    /** Backgrounds / borders of inline elements (<mark>, <code>, pills), one box per line. */
+    async function inlineBoxes(el, cs) {
+      const out = [];
+      for (const r of Array.prototype.slice.call(el.getClientRects())) {
+        if (r.width < 0.5 || r.height < 0.5) continue;
+        const box = rectOf(r);
+        const b = readBorders(cs, box);
+        out.push({
+          type: 'frame', name: layerName(el), x: box.x, y: box.y, w: box.w, h: box.h, fills: await backgroundPaints(el, cs, box),
+          stroke: b && b.stroke, radius: readRadii(cs, box.w, box.h), effects: parseShadows(cs.boxShadow, true), children: []
+        });
+      }
+      return out;
+    }
+
+    function atomicSharesLine(seg) {
+      if (!seg.atomics.length) return false;
+      const tr = [];
+      seg.items.forEach(function (it) { if (it.kind === 'text') tr.push.apply(tr, textRects(it.node)); });
+      return seg.atomics.some(function (a) {
+        const r = a.getBoundingClientRect();
+        return tr.some(function (t) { return t.top < r.bottom && t.bottom > r.top; });
+      });
+    }
+
+    /** Flattened tree: open shadow roots (web components) and slotted content. */
+    function renderedChildren(n) {
+      if (n.tagName === 'SLOT') {
+        const assigned = n.assignedNodes({ flatten: true });
+        if (assigned.length) return assigned;
+      }
+      return Array.prototype.slice.call((n.shadowRoot || n).childNodes);
+    }
+
+    /** Children in DOM order. Runs of inline content (text + inline elements) are
+     *  grouped into segments and become rich text; everything else recurses. */
+    async function serializeContent(el, cs, node, clipFill, deco) {
+      const seq = [];
+      const cleanups = [];
+      let seg = null;
+      const openSeg = function () {
+        if (!seg) {
+          seg = { items: [], atomics: [], decos: [], fragment: false };
+          seq.push({ seg: seg });
+        }
+        return seg;
+      };
+
+      async function walk(parent, pcs, inh) {
+        for (const child of renderedChildren(parent)) {
+          if (child.nodeType === 3) {
+            if (child.data && pcs.visibility !== 'hidden') openSeg().items.push({ kind: 'text', node: child, cs: pcs, style: runStyle(pcs, parent, inh) });
+            continue;
+          }
+          if (child.nodeType !== 1) continue;
+          const tag = child.tagName.toUpperCase();
+          if (tag === 'BR') { openSeg().items.push({ kind: 'br', cs: pcs, style: runStyle(pcs, parent, inh) }); continue; }
+          if (SKIP_TAGS.has(tag)) continue;
+          const ccs = win.getComputedStyle(child);
+          if (ccs.display === 'none') continue;
+          if (ccs.display === 'contents') {
+            cleanups.push(materializePseudos(child));
+            await walk(child, ccs, { deco: decoLine(ccs) || inh.deco, clip: inh.clip });
+            continue;
+          }
+          if (ccs.position === 'absolute' || ccs.position === 'fixed') { seq.push({ el: child, deco: null }); continue; }
+          if (ccs.float !== 'none') {
+            const s = openSeg();
+            s.fragment = true;
+            s.items.push({ kind: 'break' });
+            seq.push({ el: child, deco: null });
+            continue;
+          }
+          if (ccs.display === 'inline' && !REPLACED.has(tag) && tag !== 'BUTTON') {
+            cleanups.push(materializePseudos(child));
+            const s = openSeg();
+            const clipped = isClipText(ccs);
+            if (!clipped && hasBoxLook(ccs)) s.decos.push({ el: child, cs: ccs });
+            // Horizontal padding/border/margin push the following words along;
+            // rich text reproduces that with extra letter-spacing (a "pad").
+            const next = { deco: decoLine(ccs) || inh.deco, clip: inh.clip };
+            const start = px(ccs.marginLeft) + px(ccs.borderLeftWidth) + px(ccs.paddingLeft);
+            const end = px(ccs.paddingRight) + px(ccs.borderRightWidth) + px(ccs.marginRight);
+            if (Math.abs(start) > 0.01) s.items.push({ kind: 'pad', px: start, el: child, start: true, margin: px(ccs.marginLeft), style: runStyle(ccs, child, next) });
+            if (clipped) {
+              const b = boundsOf(child.getClientRects());
+              next.clip = { fills: await backgroundPaints(child, ccs, b), box: b };
+            }
+            await walk(child, ccs, next);
+            if (Math.abs(end) > 0.01) s.items.push({ kind: 'pad', px: end, el: child, start: false, margin: px(ccs.marginRight), style: runStyle(ccs, child, next) });
+            continue;
+          }
+          if (/^inline/.test(ccs.display)) {
+            const s = openSeg();
+            s.atomics.push(child);
+            s.items.push({ kind: 'break' });
+            seq.push({ el: child, deco: null });
+            continue;
+          }
+          seg = null; // block-level child ends the line box run
+          seq.push({ el: child, deco: inh.deco });
+        }
+      }
+
+      await walk(el, cs, { deco: deco, clip: clipFill });
+
+      for (const entry of seq) {
+        if (entry.el) {
+          const c = await serializeElement(entry.el, entry.deco);
+          if (c) node.children.push(c);
+          continue;
+        }
+        const s = entry.seg;
+        for (const d of s.decos) node.children.push.apply(node.children, await inlineBoxes(d.el, d.cs));
+        if (!s.items.some(function (it) { return it.kind === 'text' && /\S/.test(it.node.data); })) continue;
+        if (isIconSeg(s)) {
+          const icon = iconNode(s);
+          if (icon) node.children.push(icon);
+          continue;
+        }
+        const rich = s.fragment || atomicSharesLine(s) ? 'split' : richText(s, el, cs, seq.length === 1);
+        (rich === 'split' ? fragmentTexts(s, cs) : [rich]).forEach(function (t) { if (t) node.children.push(t); });
+      }
+      cleanups.reverse().forEach(function (f) { f(); });
+    }
+
+    // -------------------------------------------------------------------------
+    // Page loading
+    // -------------------------------------------------------------------------
+
+    // Runs before page scripts: report every observed element as on screen so
+    // scroll-reveal / lazy-load code renders content below the fold.
+    const BOOTSTRAP = '<script>(function(){window.IntersectionObserver=function(cb){var o=this;o.root=null;o.rootMargin="0px";' +
+      'o.thresholds=[0];o.observe=function(t){setTimeout(function(){var r=t.getBoundingClientRect();cb([{target:t,isIntersecting:true,' +
+      'intersectionRatio:1,boundingClientRect:r,intersectionRect:r,rootBounds:null,time:performance.now()}],o)},0)};' +
+      'o.unobserve=o.disconnect=function(){};o.takeRecords=function(){return[]}};})();<\/script>';
+
+    function injectBootstrap(src) {
+      const m = src.match(/<head[^>]*>/i) || src.match(/<html[^>]*>/i);
+      return m ? src.slice(0, m.index + m[0].length) + BOOTSTRAP + src.slice(m.index + m[0].length) : BOOTSTRAP + src;
     }
 
     function waitForIframeLoad(iframe) {
-      return new Promise(function (resolve, reject) {
-        const timeout = setTimeout(function () {
-          reject(new Error('The HTML preview did not finish loading.'));
-        }, 10000);
+      return new Promise(function (resolve) {
+        // Slow third-party assets shouldn't block the import: measure what's there.
+        const timeout = setTimeout(resolve, 15000);
         iframe.onload = function () {
           clearTimeout(timeout);
           resolve();
@@ -1324,36 +2291,30 @@
       });
     }
 
-    async function waitForPageAssets(doc) {
+    async function waitForPageAssets() {
       const images = Array.prototype.slice.call(doc.images || []);
-      await Promise.all(images.map(function (img) {
-        if (img.complete) return Promise.resolve();
-        return new Promise(function (resolve) {
-          img.addEventListener('load', resolve, { once: true });
-          img.addEventListener('error', resolve, { once: true });
-        });
-      }));
-      if (doc.fonts && doc.fonts.ready) {
-        await Promise.race([
-          doc.fonts.ready,
-          new Promise(function (resolve) { setTimeout(resolve, 5000); })
-        ]);
-      }
+      images.forEach(function (img) { if (img.loading === 'lazy') img.loading = 'eager'; });
+      await Promise.race([
+        Promise.all(images.map(function (img) {
+          if (img.complete) return null;
+          return new Promise(function (resolve) {
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+          });
+        })),
+        sleep(8000)
+      ]);
+      if (doc.fonts && doc.fonts.ready) await Promise.race([doc.fonts.ready, sleep(5000)]);
     }
 
-    /** Wait for a JS-rendered page's own script to finish mutating the DOM
-     *  (e.g. unpacking a templated/bundled export), by waiting for a quiet
-     *  period with no mutations. Caps out so a page that never settles
-     *  (animations, polling) doesn't hang the import. */
-    function waitForDomToSettle(doc) {
+    /** Wait for a JS-rendered page to stop mutating the DOM (capped). */
+    function waitForDomToSettle() {
       return new Promise(function (resolve) {
-        const QUIET_MS = 400;
-        const MAX_MS = 8000;
         let quietTimer = null;
-        const hardTimer = setTimeout(finish, MAX_MS);
+        const hardTimer = setTimeout(finish, 8000);
         const observer = new MutationObserver(function () {
           clearTimeout(quietTimer);
-          quietTimer = setTimeout(finish, QUIET_MS);
+          quietTimer = setTimeout(finish, 400);
         });
         function finish() {
           clearTimeout(hardTimer);
@@ -1362,115 +2323,107 @@
           resolve();
         }
         observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true });
-        quietTimer = setTimeout(finish, QUIET_MS);
+        quietTimer = setTimeout(finish, 400);
       });
     }
 
-    /** Render the source in a real isolated document so page-level CSS stays intact. */
-    async function captureHtmlTree(html) {
-      Object.keys(imageStore).forEach(function (k) { delete imageStore[k]; });
+    /** Snap animations to their settled state and stop timers, so the capture is stable. */
+    function freezePage() {
+      try {
+        doc.querySelectorAll('[data-aos]').forEach(function (el) { el.classList.add('aos-animate'); }); // AOS reveal
+        if (win.ScrollTrigger) win.ScrollTrigger.getAll().forEach(function (t) { if (t.animation) t.animation.progress(1); });
+        if (win.gsap) win.gsap.globalTimeline.progress(1);
+      } catch (e) { /* page libraries are optional */ }
+      void doc.body.offsetHeight; // start transitions triggered above so they can be finished too
+      (doc.getAnimations ? doc.getAnimations() : []).forEach(function (a) {
+        try {
+          const end = a.effect && a.effect.getComputedTiming().endTime;
+          if (isFinite(end)) a.finish(); // entrance effects end visible
+          else { a.pause(); a.currentTime = 0; } // loops rest on their first frame
+        } catch (e) { /* ignore */ }
+      });
+      try {
+        const lastTimer = win.setTimeout(function () {}, 0);
+        for (let i = 0; i <= lastTimer; i++) { win.clearTimeout(i); win.clearInterval(i); }
+        const lastFrame = win.requestAnimationFrame(function () {});
+        for (let i = 0; i <= lastFrame; i++) win.cancelAnimationFrame(i);
+      } catch (e) { /* scripts disabled */ }
+    }
+
+    /** Render the source in a real isolated document at the viewport size and measure it. */
+    async function captureHtmlTree(html, opts) {
+      imageStore = {};
+      imageSeq = 0;
+      imageLoads = new Map();
+      fontCheck = new Map();
+      fontProbe = null;
       renderHost.innerHTML = '';
 
-      const runScripts = !!(runScriptsInput && runScriptsInput.checked);
       // Scripts stay stripped and the iframe stays script-less by default: a
       // sandbox that both runs scripts and shares origin (needed to read the
-      // rendered DOM back out) can reach into this UI page. Only relax it
-      // when the user opts in for a page that renders its content via JS
-      // (e.g. a bundled/templated export).
-      const safe = runScripts ? html : html.replace(/<script[\s\S]*?<\/script>/gi, '');
-      const source = /<html[\s>]/i.test(safe)
-        ? safe
-        : '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + safe + '</body></html>';
+      // rendered DOM back out) can reach into this UI page. Only relax it when
+      // the user opts in for a page that renders its content via JS.
+      let source = opts.runScripts ? html : html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
+      if (!/<html[\s>]/i.test(source)) {
+        source = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + source + '</body></html>';
+      }
+      if (opts.runScripts) source = injectBootstrap(source);
 
-      // Keep the measure iframe in the plugin viewport (opacity:0). Off-screen /
-      // visibility:hidden iframes are throttled inside Figma's plugin UI and
-      // often yield empty or collapsed layout measurements.
-      renderHost.style.width = Math.min(viewportWidth, 360) + 'px';
-      renderHost.style.height = '1px';
-      renderHost.style.overflow = 'hidden';
-
+      // The iframe is a real viewport (so 100vh, media queries and fixed
+      // elements match a browser window). It stays in the plugin viewport at
+      // opacity 0: off-screen iframes get throttled inside Figma.
+      renderHost.style.width = Math.min(opts.width, 360) + 'px';
       const iframe = document.createElement('iframe');
-      iframe.setAttribute('sandbox', runScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
+      iframe.setAttribute('sandbox', opts.runScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
       iframe.setAttribute('scrolling', 'no');
-      iframe.style.cssText =
-        'display:block;border:0;width:' + viewportWidth + 'px;height:1px;opacity:0;pointer-events:none;';
+      iframe.style.cssText = 'display:block;border:0;width:' + opts.width + 'px;height:' + opts.height + 'px;opacity:0;pointer-events:none;';
       renderHost.appendChild(iframe);
 
       setStatus('Loading page assets…');
       try {
-        const loadPromise = waitForIframeLoad(iframe);
-        // Start short so scrollHeight reflects content, not the iframe chrome
-        iframe.style.height = '1px';
+        const loaded = waitForIframeLoad(iframe);
         iframe.srcdoc = source;
-        await loadPromise;
-        const doc = iframe.contentDocument;
-        const win = iframe.contentWindow;
+        await loaded;
+        doc = iframe.contentDocument;
+        win = iframe.contentWindow;
         if (!doc || !win || !doc.body) throw new Error('Could not access the HTML preview.');
-        if (runScripts) {
+        const style = doc.createElement('style');
+        style.textContent = '[data-h2f~="b"]::before{content:none!important}[data-h2f~="a"]::after{content:none!important}';
+        (doc.head || doc.documentElement).appendChild(style);
+        if (opts.runScripts) {
           setStatus('Running page scripts…');
-          await waitForDomToSettle(doc);
+          await waitForDomToSettle();
         }
-        await waitForPageAssets(doc);
-        prepareDomForCapture(doc.body);
-
-        // Expand to content height (not a huge empty viewport that stretches body)
-        const contentHeight = Math.max(
-          doc.body.scrollHeight,
-          doc.documentElement.scrollHeight,
-          doc.body.offsetHeight,
-          600
-        );
-        iframe.style.height = Math.min(contentHeight + 40, 20000) + 'px';
-
-        await new Promise(function (r) {
-          win.requestAnimationFrame(function () { win.requestAnimationFrame(r); });
-        });
-        await new Promise(function (r) { setTimeout(r, 80); });
-
-        setStatus('Measuring desktop layout…');
-        const root = doc.documentElement;
-        const rootRect = root.getBoundingClientRect();
-        const bodyRect = doc.body.getBoundingClientRect();
-        const hostRect = {
-          left: Math.min(rootRect.left, bodyRect.left),
-          top: Math.min(rootRect.top, bodyRect.top)
-        };
-
-        // Prefer the bottom of the last in-flow child over a stretched body box
-        let contentBottom = bodyRect.top;
-        const topKids = doc.body.children;
-        for (let i = 0; i < topKids.length; i++) {
-          const r = topKids[i].getBoundingClientRect();
-          if (r.height > 0) contentBottom = Math.max(contentBottom, r.bottom);
-        }
-        const measuredHeight = Math.max(
-          contentBottom - hostRect.top,
-          doc.body.scrollHeight,
-          root.scrollHeight
-        );
-
-        const tree = await serializeElement(doc.body, hostRect, win);
-        if (tree) {
-          tree.name = 'Desktop';
-          tree.x = 0;
-          tree.y = 0;
-          tree.width = Math.max(viewportWidth, root.scrollWidth, doc.body.scrollWidth);
-          tree.height = Math.ceil(measuredHeight);
-          const bodyStyle = win.getComputedStyle(doc.body);
-          tree.backgroundColor = parseCssColor(bodyStyle.backgroundColor) ||
-            parseCssColor(win.getComputedStyle(root).backgroundColor);
-          if (!tree.children || tree.children.length === 0) {
-            throw new Error(
-              'Layout measured an empty page. Try again, or paste a full HTML document with inline CSS.'
-            );
-          }
-        }
-        return tree;
+        await waitForPageAssets();
+        // ponytail: fixed wait for canvas chart intro animations (Chart.js ≈ 1s); hook the library if it needs more.
+        if (opts.runScripts && doc.querySelector('canvas')) await sleep(1200);
+        freezePage();
+        await sleep(50);
+        win.scrollTo(0, 0);
+        setStatus('Measuring layout…');
+        return await serializePage(opts);
       } finally {
         renderHost.innerHTML = '';
         renderHost.style.width = '1px';
-        renderHost.style.height = '1px';
+        doc = null;
+        win = null;
       }
+    }
+
+    async function serializePage(opts) {
+      const root = doc.documentElement, body = doc.body;
+      const hcs = win.getComputedStyle(root), bcs = win.getComputedStyle(body);
+      const w = opts.width;
+      const h = Math.ceil(Math.max(root.scrollHeight, body.scrollHeight, opts.height));
+      // The canvas background comes from <html>, or from <body> when <html> has none.
+      bodyBgOnCanvas = !parseColor(hcs.backgroundColor) && hcs.backgroundImage === 'none';
+      const fills = await backgroundPaints(bodyBgOnCanvas ? body : root, bodyBgOnCanvas ? bcs : hcs, { x: 0, y: 0, w: w, h: h });
+      if (!(fills[0] && fills[0].type === 'SOLID' && fills[0].color.a > 0.999)) fills.unshift(solidPaint({ r: 1, g: 1, b: 1, a: 1 }));
+      const bodyNode = await serializeElement(body, null);
+      if (!bodyNode) {
+        throw new Error('Layout measured an empty page. Try again, or paste a full HTML document with inline CSS.');
+      }
+      return { type: 'frame', name: 'Page', x: 0, y: 0, w: w, h: h, fills: fills, effects: [], clip: true, children: [bodyNode] };
     }
 
     convertBtn.addEventListener('click', async function () {
@@ -1482,30 +2435,22 @@
         return;
       }
 
+      const opts = { width: viewport.w, height: viewport.h, runScripts: runScriptsInput.checked };
+      scriptsSkipped = !opts.runScripts && /<script\b/i.test(html);
       setImporting(true, 'Rendering page…');
-      setStatus('Rendering at ' + viewportWidth + 'px…');
+      setStatus('Rendering at ' + opts.width + ' × ' + opts.height + '…');
 
       try {
-        const tree = await withTimeout(
-          captureHtmlTree(html),
-          45000,
-          'Render'
-        );
-        if (!tree) {
-          setStatus('Nothing measurable found in the HTML.', 'error');
-          setImporting(false);
-          return;
-        }
-
+        const page = await inlineAssets(html, assetFiles);
+        const tree = await withTimeout(captureHtmlTree(page, opts), 90000, 'Render');
         setImporting(true, 'Creating Figma layers…');
         setStatus('Importing…');
-
         parent.postMessage({
           pluginMessage: {
             type: 'convert',
             tree: tree,
-            images: Object.assign({}, imageStore),
-            viewportWidth: viewportWidth,
+            images: imageStore,
+            viewportWidth: opts.width,
             asComponent: asComponentInput.checked
           }
         }, '*');
@@ -1515,7 +2460,7 @@
             'Figma did not finish the import. Try a smaller self-contained HTML file, then run the plugin again.',
             'error'
           );
-        }, 90000);
+        }, 120000);
       } catch (err) {
         renderHost.innerHTML = '';
         setStatus(err && err.message ? err.message : String(err), 'error');
@@ -1525,11 +2470,15 @@
 
     onmessage = function (event) {
       const msg = event.data && event.data.pluginMessage;
-      if (!msg) return;
+      if (!msg || msg.type === 'convert') return;
       setImporting(false);
       if (msg.type === 'done') {
-        setStatus('Imported · ' + msg.count + ' layers' +
-          (msg.styles ? ' · ' + msg.styles + ' colors' : ''), 'ok');
+        let text = 'Imported · ' + msg.count + ' layers' + (msg.styles ? ' · ' + msg.styles + ' colors' : '');
+        if (msg.missingFonts && msg.missingFonts.length) {
+          text += '\nNot in Figma (substituted): ' + msg.missingFonts.slice(0, 6).join(', ');
+        }
+        if (scriptsSkipped) text += '\nThis page has scripts. If something is missing, tick “Execute page scripts”.';
+        setStatus(text, 'ok');
       } else if (msg.type === 'error') {
         setStatus(msg.message, 'error');
       }

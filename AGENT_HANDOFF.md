@@ -31,7 +31,8 @@ The current output intentionally uses absolute positioning. Do not add Auto Layo
 | `code.ts` | Figma main thread; turns the serialized tree into Figma nodes |
 | `code.js` | Build output from `code.ts`; regenerate with `npm run build` |
 | `manifest.json` | Figma plugin entry points and network permissions |
-| `examples/` | Sample documents used for manual visual regression testing |
+| `examples/` | Sample documents used for manual visual regression testing (`kitchen-sink.html` covers most features; `tailwind-cdn.html` needs page scripts) |
+| `test/check.html` | Runs the real capture on `examples/kitchen-sink.html` and asserts the tree (serve the repo root, open `/test/check.html`) |
 
 ## Non-negotiable UX behavior
 
@@ -53,13 +54,13 @@ Prioritize in this order:
 
 ## Current limitations to improve
 
-- CSS color parsing supports only hex and `rgb()` / `rgba()`.
-- Only simple linear gradients are rebuilt; layered, radial, and conic backgrounds need a raster fallback.
-- Inline SVGs are currently rasterized; use native Figma SVG nodes when feasible.
-- Rich text runs inside elements such as `<p><strong>…</strong></p>` are not preserved as mixed Figma text styles.
-- Browser and Figma font metrics can differ. Page fonts must be available in Figma for closest results.
-- Relative and cross-origin images may fail because local file paths and CORS cannot be reliably read by the plugin.
-- CSS filters, transforms, masks, blend modes, animations, and complicated clipping cannot always become editable Figma layers.
+- Figma's copy of a web font can differ from the served one (variable optical sizes, versions). Lines keep the browser's breaks, but widths can still drift by a few percent. The plugin API has no variable-axis control.
+- Skew, non-uniform scale and 3D transforms keep the measured bounding box instead of being re-applied.
+- `clip-path`, masks and CSS filters other than blur / drop-shadow are not reproduced (images get their filter baked in).
+- Conic / repeating / tiled gradients and HTML inside `<foreignObject>` become image fills.
+- Images from servers without CORS are fetched by Figma itself and lose exact `object-position` cropping.
+- CSS `counter()` values are estimated from sibling position; `@import` inside picked local stylesheets is not followed.
+- Cross-origin iframes, `<audio>` and closed shadow roots render as placeholders or not at all.
 
 ## Implementation principles
 
@@ -68,12 +69,10 @@ Prioritize in this order:
 - Prefer exact visual output plus a localized raster fallback over a misleading editable approximation.
 - Never leave the UI in a loading state after an error or timeout.
 - Build after TypeScript changes: `npm run build`.
-- Test manually in Figma desktop with both `examples/sample.html` and `examples/neuroessence.html`.
+- Run `test/check.html` after capture changes, then test in Figma desktop with the files in `examples/`.
 
 ## Suggested next improvements
 
-1. Add a screenshot/raster fallback for unsupported backgrounds and effects.
-2. Use `figma.createNodeFromSvg()` for inline SVG where possible.
-3. Preserve mixed text ranges using Figma range styling APIs.
-4. Add golden regression tests for serialized layouts and key visual properties.
-5. Infer Auto Layout only for simple, high-confidence flex containers.
+1. Infer Auto Layout only for simple, high-confidence flex containers.
+2. Rasterize elements with `clip-path` / masks as a named fallback layer.
+3. Detect repeated sibling structures (cards, list rows) and offer them as components.
