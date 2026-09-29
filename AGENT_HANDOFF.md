@@ -39,6 +39,10 @@ The current output intentionally uses absolute positioning. Do not add Auto Layo
 
 The UI is a "strawberry matcha" liquid-glass theme (tokens at the top of `ui.html`'s `<style>`; Nunito is inlined so the UI makes no network requests). The mascot reacts purely in CSS through `:has()` on hooks the script already sets: `#convert.loading` (charging), `#status.ok` (happy) and `#status.error` (droopy ears). Keep those IDs and classes when changing the markup, and keep the plugin height (`figma.showUI`, 360 × 600) in sync with the layout.
 
+It is also interactive: its eyes follow the pointer (`--lx` / `--ly`, set on `pointermove`), its ears perk up on hover, and a `pointerdown` boop plays a squish through `element.animate()`.
+
+kevbry.in/open-html-to-figma embeds a verbatim copy of `ui.html` as a playground. That page replaces the global `captureHtmlTree` (it calls `setStatus` for the steps) and answers the `convert` message with `done`, so renaming either function breaks the playground.
+
 ## Non-negotiable UX behavior
 
 - If there is no pasted HTML when the user clicks import, show a clear error and open the file picker.

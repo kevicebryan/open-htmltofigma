@@ -66,6 +66,8 @@
       bottom: -33px;
       width: 92px;
       overflow: visible;
+      cursor: pointer;
+      transform-origin: bottom;
       filter: drop-shadow(0 8px 12px rgba(16, 60, 36, 0.28));
     }
 
@@ -75,10 +77,15 @@
     .mochi .happy { fill: none; stroke: var(--berry); stroke-width: 15; stroke-linecap: round; opacity: 0; }
     .mochi .eyes, .mochi .happy { transform-box: view-box; transform-origin: 256px 300px; }
     .mochi .eyes { animation: blink 5s infinite; }
-    .mochi .ear { transform-box: view-box; transition: transform 0.6s var(--spring); }
+    .mochi .ear { transform-box: view-box; transition: transform 0.6s var(--spring), rotate 0.4s var(--spring); }
     .mochi .ear-l { transform-origin: 201px 259px; }
     .mochi .ear-r { transform-origin: 311px 259px; animation: twitch 7s 2s infinite; }
     .mochi .cheeks circle { transform-box: fill-box; transform-origin: center; }
+
+    /* It looks at the pointer (--lx / --ly, set by the script) and perks up on hover. */
+    .mochi .eyes, .mochi .happy { translate: var(--lx, 0) var(--ly, 0); transition: translate 0.15s ease-out; }
+    .mochi:hover .ear-l { rotate: 10deg; }
+    .mochi:hover .ear-r { rotate: -10deg; }
 
     /* Charging while importing, happy on success, droopy ears on error. */
     body:has(#convert.loading) .mochi { animation: bob 0.9s ease-in-out infinite; }
@@ -2642,10 +2649,29 @@
       }
     };
 
-    // Glass rim light follows the pointer.
+    const mochi = document.querySelector('.mochi');
+
+    // Glass rim light follows the pointer, and the mouse looks at it.
     addEventListener('pointermove', function (e) {
       document.documentElement.style.setProperty('--mx', e.clientX + 'px');
       document.documentElement.style.setProperty('--my', e.clientY + 'px');
+      const r = mochi.getBoundingClientRect();
+      const dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height * 0.54; // eye line
+      const k = Math.min(1, Math.hypot(dx, dy) / 150) / (Math.hypot(dx, dy) || 1);
+      mochi.style.setProperty('--lx', (dx * k * 20).toFixed(1) + 'px');
+      mochi.style.setProperty('--ly', (dy * k * 14).toFixed(1) + 'px');
+    });
+
+    // Boop the mouse: it squishes, squints and blushes.
+    mochi.addEventListener('pointerdown', function () {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const t = { duration: 600, easing: 'ease-out' };
+      mochi.animate({ scale: ['1', '1.12 0.86', '0.95 1.06', '1'] }, t);
+      mochi.querySelector('.eyes').animate({ opacity: [0, 0] }, t);
+      mochi.querySelector('.happy').animate({ opacity: [1, 1] }, t);
+      mochi.querySelectorAll('.cheeks circle').forEach(function (c) {
+        c.animate({ scale: [1, 1.3, 1], fill: ['#ff8fb3', '#ff5f97', '#ff8fb3'] }, t);
+      });
     });
   </script>
 </body>
