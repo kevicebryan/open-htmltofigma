@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<!--
+  Promo boards built from the live plugin UI. Serve the repo root, then screenshot one board:
+    python3 -m http.server 8765
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+      --force-device-scale-factor=2 --virtual-time-budget=3500 --window-size=1920,1080 \
+      --screenshot=cover.png "http://localhost:8765/docs/promo.html?cover"
+  Boards: ?cover, ?states and ?result at 1920×1080 (Figma Community), ?linkedin at 1080×1350.
+  figma-import.png is a real import of examples/kitchen-sink.html made by this plugin's builder.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Open HTML to Figma — promo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600..900&display=swap">
+<style>
+  :root { --ink: #143326; --sub: #1e4032; --berry: #5e1f3d; --straw: #ff8fb3; --matcha: #74b087; --figma-blue: #0d99ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: Nunito, system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(circle, rgba(255, 255, 255, 0.3) 2px, transparent 2.8px) 0 0 / 26px 26px,
+      radial-gradient(50% 60% at 88% 70%, rgba(255, 143, 179, 0.8), transparent 70%),
+      radial-gradient(60% 55% at 0 0, rgba(255, 255, 255, 0.55), transparent 70%),
+      linear-gradient(160deg, #8cc49b, var(--matcha) 55%, #5b9a71);
+  }
+  section { position: relative; width: 100vw; height: 100vh; }
+
+  .eyebrow { display: flex; align-items: center; gap: 18px; font: 800 26px/1 Nunito; color: var(--sub); }
+  .eyebrow img { width: 64px; border-radius: 16px; box-shadow: 0 10px 24px -10px rgba(16, 60, 36, 0.6); }
+  h1 { margin: 0; font-weight: 900; letter-spacing: -0.035em; line-height: 0.92; }
+  .lede { margin: 0; font-weight: 700; color: var(--sub); line-height: 1.3; }
+  .chips { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .chips li, .tag {
+    padding: 12px 22px;
+    border-radius: 999px;
+    font: 800 24px/1 Nunito;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 8px 20px -12px rgba(16, 60, 36, 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .tag { position: absolute; }
+
+  /* Plugin window: the real ui.html at 360×600, scaled by --s. */
+  .win {
+    position: absolute;
+    width: calc(360px * var(--s));
+    border-radius: calc(12px * var(--s));
+    overflow: hidden;
+    background: #2c2c2c;
+    box-shadow: 0 50px 90px -40px rgba(10, 50, 30, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.15);
+  }
+  .bar { display: flex; align-items: center; gap: calc(8px * var(--s)); height: calc(40px * var(--s)); padding: 0 calc(12px * var(--s)); color: #fff; font: 600 calc(12px * var(--s))/1 system-ui, sans-serif; }
+  .bar img { width: calc(16px * var(--s)); border-radius: calc(4px * var(--s)); }
+  .bar i { margin-left: auto; font-style: normal; opacity: 0.6; }
+  .win iframe { display: block; width: 360px; height: 600px; border: 0; transform: scale(var(--s)); transform-origin: 0 0; margin-bottom: calc(600px * (var(--s) - 1)); }
+
+  /* Browser frame showing the source page at 1440 wide, scaled by --k. */
+  .browser { position: absolute; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 40px 80px -40px rgba(10, 50, 30, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.08); }
+  .tabbar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: #eef2ef; font: 700 15px/1 Nunito; color: #52665b; }
+  .tabbar b { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .tabbar b + b { background: #febc2e; } .tabbar b + b + b { background: #28c840; }
+  .tabbar span { margin-left: 10px; padding: 6px 14px; border-radius: 8px; background: #fff; }
+  .page { width: calc(1440px * var(--k)); height: calc(900px * var(--k)); overflow: hidden; }
+  .page iframe { width: 1440px; height: 900px; border: 0; transform: scale(var(--k)); transform-origin: 0 0; }
+
+  /* Figma canvas with the selected import. */
+  .canvas { position: absolute; overflow: hidden; border-radius: 16px; background: #1e1e1e; box-shadow: 0 40px 80px -40px rgba(10, 50, 30, 0.7); }
+  .canvas .name { position: absolute; font: 600 15px/1 system-ui, sans-serif; color: var(--figma-blue); }
+  .canvas .sel { position: absolute; outline: 2px solid var(--figma-blue); }
+  .canvas .sel img { display: block; width: 100%; }
+  .canvas .sel::before, .canvas .sel::after { content: ""; position: absolute; top: -6px; width: 10px; height: 10px; background: #fff; border: 2px solid var(--figma-blue); }
+  .canvas .sel::before { left: -6px; } .canvas .sel::after { right: -6px; }
+
+  .caption { position: absolute; text-align: center; }
+  .caption b { display: block; font: 900 34px/1.1 Nunito; }
+  .caption span { font: 700 21px/1.3 Nunito; color: var(--sub); }
+</style>
+</head>
+<body>
+  <section id="cover" hidden>
+    <div style="position: absolute; left: 120px; top: 50%; transform: translateY(-50%); width: 920px; display: grid; gap: 36px;">
+      <div class="eyebrow"><img src="logo.svg" alt="">Figma plugin · Free &amp; open source</div>
+      <h1 style="font-size: 164px;">Open HTML<br>to Figma</h1>
+      <p class="lede" style="font-size: 40px;">Turn a local HTML file into editable Figma&nbsp;layers that match what the browser renders.</p>
+      <ul class="chips"><li>Editable text</li><li>Browser-matched layout</li><li>SVGs &amp; images</li></ul>
+    </div>
+    <div class="win" data-state="done" style="--s: 1.45; right: 130px; top: 50%; transform: translateY(-50%);">
+      <div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe>
+    </div>
+  </section>
+
+  <section id="states" hidden>
+    <h1 style="position: absolute; top: 70px; width: 100%; text-align: center; font-size: 68px; letter-spacing: -0.03em;">It reacts while it imports</h1>
+    <div class="win" data-state="ready" style="--s: 1.1; left: 96px; top: 196px;"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+    <div class="win" data-state="loading" style="--s: 1.1; left: 540px; top: 196px;"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+    <div class="win" data-state="done" style="--s: 1.1; left: 984px; top: 196px;"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+    <div class="win" data-state="error" style="--s: 1.1; left: 1428px; top: 196px;"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+    <div class="caption" style="left: 96px; top: 928px; width: 396px;"><b>Ready</b><span>Pick a viewport, drop a file</span></div>
+    <div class="caption" style="left: 540px; top: 928px; width: 396px;"><b>Charging</b><span>Cheeks spark while it renders</span></div>
+    <div class="caption" style="left: 984px; top: 928px; width: 396px;"><b>Done</b><span>Happy when the layers land</span></div>
+    <div class="caption" style="left: 1428px; top: 928px; width: 396px;"><b>Oops</b><span>Ears droop on errors</span></div>
+  </section>
+
+  <section id="result" hidden>
+    <h1 style="position: absolute; top: 70px; width: 100%; text-align: center; font-size: 68px; letter-spacing: -0.03em;">Same page, now editable in Figma</h1>
+    <span class="tag" style="left: 96px; top: 206px;">In the browser</span>
+    <div class="browser" style="--k: 0.5556; left: 96px; top: 280px;">
+      <div class="tabbar"><b></b><b></b><b></b><span>landing-page.html</span></div>
+      <div class="page"><iframe></iframe></div>
+    </div>
+    <span class="tag" style="left: 1024px; top: 206px;">In Figma · 185 editable layers</span>
+    <div class="canvas" style="left: 1024px; top: 280px; width: 800px; height: 540px;">
+      <div class="name" style="left: 56px; top: 30px;">HTML Import · 1440px</div>
+      <div class="sel" style="left: 56px; top: 56px; width: 688px;"><img src="figma-import.png" alt=""></div>
+    </div>
+    <p class="lede" style="position: absolute; left: 0; right: 0; top: 880px; text-align: center; font-size: 30px;">Real text layers, per-side borders, gradients, shadows and vectors. No screenshot tracing.</p>
+  </section>
+
+  <section id="linkedin" hidden>
+    <div style="position: absolute; left: 80px; top: 84px; right: 80px; display: grid; gap: 26px;">
+      <div class="eyebrow"><img src="logo.svg" alt="">New Figma plugin · Free &amp; open source</div>
+      <h1 style="font-size: 124px;">Open HTML<br>to Figma</h1>
+      <p class="lede" style="font-size: 38px;">Local HTML in, editable Figma layers out.</p>
+    </div>
+    <div class="browser" style="--k: 0.5; left: 60px; top: 660px;">
+      <div class="tabbar"><b></b><b></b><b></b><span>landing-page.html</span></div>
+      <div class="page"><iframe></iframe></div>
+    </div>
+    <div class="win" data-state="done" style="--s: 1.08; right: 60px; top: 560px;">
+      <div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe>
+    </div>
+    <p class="lede" style="position: absolute; left: 80px; bottom: 62px; font-size: 27px;">github.com/kevicebryan/open-htmltofigma</p>
+  </section>
+
+<script>
+  const board = document.getElementById(location.search.slice(1) || 'cover');
+  board.hidden = false;
+  const source = fetch('../examples/kitchen-sink.html').then(function (r) { return r.text(); });
+
+  function loaded(d, html) {
+    d.getElementById('file-zone').classList.add('has-file');
+    d.getElementById('file-title').textContent = 'landing-page.html';
+    d.getElementById('file-desc').textContent = '12 KB loaded · 3 local assets';
+    d.getElementById('html').value = html;
+  }
+  function status(d, kind, text) {
+    const el = d.getElementById('status');
+    el.className = kind;
+    el.textContent = text;
+  }
+  // Mirrors what ui.html itself shows in each phase. 185 = layers in the real kitchen-sink import.
+  const STATES = {
+    ready: function () {},
+    loading: function (d, html) {
+      loaded(d, html);
+      const btn = d.getElementById('convert');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      d.getElementById('convert-label').textContent = 'Creating Figma layers…';
+      status(d, '', 'Importing…');
+    },
+    done: function (d, html) {
+      loaded(d, html);
+      d.getElementById('as-component').checked = true;
+      status(d, 'ok', 'Imported · 185 layers');
+    },
+    error: function (d) {
+      status(d, 'error', 'Choose an HTML file (.html or .htm). "brief.pdf" is not supported.');
+    }
+  };
+
+  board.querySelectorAll('.win').forEach(function (win) {
+    const frame = win.querySelector('iframe');
+    frame.addEventListener('load', function () {
+      source.then(function (html) { STATES[win.dataset.state](frame.contentDocument, html); });
+    });
+    frame.src = '../ui.html';
+  });
+  board.querySelectorAll('.page iframe').forEach(function (f) { f.src = '../examples/kitchen-sink.html'; });
+</script>
+</body>
+</html>

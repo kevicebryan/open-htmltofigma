@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<!--
+  Demo video scene (1920×1080). render(t) draws the frame at t ms, including the real plugin UI in an
+  iframe whose CSS animations are paused and stepped in sync. docs/record.mjs turns it into demo.mp4.
+  The Figma side uses figma-import.png, a real import of examples/kitchen-sink.html, and its real layer names.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Open HTML to Figma — demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600..900&display=swap">
+<style>
+  :root { --ink: #143326; --sub: #1e4032; --berry: #5e1f3d; --straw: #ff8fb3; --matcha: #74b087; --blue: #0d99ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    position: relative;
+    font-family: Nunito, system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(circle, rgba(255, 255, 255, 0.3) 2px, transparent 2.8px) 0 0 / 26px 26px,
+      radial-gradient(50% 60% at 88% 70%, rgba(255, 143, 179, 0.8), transparent 70%),
+      radial-gradient(60% 55% at 0 0, rgba(255, 255, 255, 0.55), transparent 70%),
+      linear-gradient(160deg, #8cc49b, var(--matcha) 55%, #5b9a71);
+  }
+  body > * { position: absolute; opacity: 0; }
+  img { display: block; }
+
+  .stack { left: 0; top: 0; width: 1920px; height: 1080px; display: grid; place-content: center; justify-items: center; text-align: center; }
+  .stack > * { will-change: transform, opacity; }
+  .logo { border-radius: 24%; box-shadow: 0 24px 50px -20px rgba(16, 60, 36, 0.6); }
+  h1 { margin: 0; font-weight: 900; letter-spacing: -0.035em; line-height: 1; }
+  .lede { margin: 0; font-weight: 700; color: var(--sub); }
+  .pill {
+    padding: 14px 26px;
+    border-radius: 999px;
+    font: 800 30px/1 Nunito;
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 12px 28px -14px rgba(16, 60, 36, 0.55);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  #brand { left: 110px; top: 96px; display: flex; align-items: center; gap: 16px; font: 900 32px/1 Nunito; letter-spacing: -0.02em; }
+  #brand img { width: 56px; border-radius: 14px; }
+
+  /* Browser window with the source page at 1440 × 1024, scaled 0.62. */
+  .window { left: 110px; top: 241px; width: 893px; height: 598px; border-radius: 16px; overflow: hidden; box-shadow: 0 40px 80px -40px rgba(10, 50, 30, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.1); }
+  #browser { background: #fff; }
+  .tabbar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: #eef2ef; font: 700 15px/1 Nunito; color: #52665b; }
+  .tabbar b { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .tabbar b + b { background: #febc2e; } .tabbar b + b + b { background: #28c840; }
+  .tabbar span { margin-left: 10px; padding: 6px 14px; border-radius: 8px; background: #fff; }
+  .page { position: relative; height: 558px; overflow: hidden; }
+  .page iframe { width: 1440px; height: 1024px; border: 0; transform: scale(0.62); transform-origin: 0 0; }
+  #scan { position: absolute; inset: 0; pointer-events: none; }
+  #scan .line { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--straw) 20%, var(--straw) 80%, transparent); box-shadow: 0 0 18px 4px rgba(255, 143, 179, 0.7); }
+  #scan .box { position: absolute; border: 2px solid rgba(255, 110, 160, 0.9); background: rgba(255, 143, 179, 0.12); border-radius: 3px; opacity: 0; }
+
+  /* Figma window: layers panel + canvas. */
+  #figma { background: #2c2c2c; color: #e6e6e6; font: 500 13px/1 system-ui, sans-serif; }
+  #figma .top { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px; border-bottom: 1px solid #3d3d3d; }
+  #figma .top b { font-weight: 600; color: #fff; }
+  #figma .top span { color: #9a9a9a; }
+  #layers { position: absolute; left: 0; top: 40px; width: 236px; bottom: 0; padding: 10px 0; border-right: 1px solid #3d3d3d; }
+  #layers h4 { margin: 0 16px 10px; font: 600 12px/1 system-ui, sans-serif; color: #fff; }
+  .row { display: flex; align-items: center; gap: 7px; height: 28px; padding-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; }
+  .row i { flex: none; width: 10px; font-style: normal; color: #8a8a8a; font-size: 9px; }
+  .row u { flex: none; width: 14px; text-decoration: none; color: #9a9a9a; font: 600 12px/1 ui-monospace, Menlo, monospace; text-align: center; }
+  .row em { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+  .row.on { background: #0c8ce9; color: #fff; }
+  .row.on u, .row.on i { color: #fff; }
+  #canvas { position: absolute; left: 236px; top: 40px; right: 0; bottom: 0; overflow: hidden; background: #1e1e1e; }
+  #zoom { position: absolute; inset: 0; transform-origin: 330px 190px; }
+  #zoom .name { position: absolute; left: 28px; top: 20px; font: 600 12px/1 system-ui, sans-serif; color: var(--blue); }
+  #zoom .frame { position: absolute; left: 28px; top: 40px; width: 600px; outline: 1.5px solid var(--blue); }
+  #hl { position: absolute; border: 2px solid var(--blue); opacity: 0; }
+  #hl span { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); padding: 3px 6px; border-radius: 4px; background: var(--blue); color: #fff; font: 600 11px/1 system-ui, sans-serif; white-space: nowrap; }
+
+  /* Plugin window: the real ui.html at 360 × 600, scaled 1.3. */
+  #plugin { left: 1342px; top: 124px; width: 468px; border-radius: 16px; overflow: hidden; background: #2c2c2c; box-shadow: 0 50px 90px -40px rgba(10, 50, 30, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.15); }
+  #plugin .bar { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; color: #fff; font: 600 16px/1 system-ui, sans-serif; }
+  #plugin .bar img { width: 21px; border-radius: 5px; }
+  #plugin .bar i { margin-left: auto; font-style: normal; opacity: 0.6; }
+  #plugin iframe { display: block; width: 360px; height: 600px; border: 0; transform: scale(1.3); transform-origin: 0 0; margin-bottom: 180px; }
+
+  #file { left: 150px; top: 880px; display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 12px; border-radius: 20px; font: 800 24px/1 Nunito; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 1px 0 #fff, 0 18px 36px -16px rgba(16, 60, 36, 0.6); transform-origin: 30px 30px; }
+  #file b { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: var(--berry); background: linear-gradient(#ffd3e1, #ffa6c4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85); }
+  #cursor { left: 0; top: 0; width: 34px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35)); transform-origin: 4px 3px; z-index: 5; }
+  #ripple { left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; border: 4px solid var(--straw); z-index: 4; }
+
+  .caption { left: 0; right: 0; top: 968px; display: flex; justify-content: center; }
+  .caption .pill { display: flex; align-items: center; gap: 14px; }
+  .caption b { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--berry); background: linear-gradient(#ffc4d7, #ff93b6); font: 900 22px/1 Nunito; }
+</style>
+</head>
+<body>
+  <div class="stack" id="intro" style="gap: 30px;">
+    <img class="logo" src="logo.svg" alt="" style="width: 240px;">
+    <h1 style="font-size: 124px;">Open HTML to Figma</h1>
+    <p class="lede" style="font-size: 42px;">Local HTML in, editable Figma layers out.</p>
+  </div>
+
+  <div id="brand"><img src="logo.svg" alt="">Open HTML to Figma</div>
+
+  <div class="window" id="browser">
+    <div class="tabbar"><b></b><b></b><b></b><span>landing-page.html</span></div>
+    <div class="page"><iframe></iframe><div id="scan"><div class="line"></div></div></div>
+  </div>
+
+  <div class="window" id="figma">
+    <div class="top"><b>My Lab</b><span>/ HTML Import · 1440px</span></div>
+    <div id="layers"><h4>Layers</h4></div>
+    <div id="canvas"><div id="zoom">
+      <div class="name">HTML Import · 1440px</div>
+      <img class="frame" src="figma-import.png" alt="">
+      <div id="hl"><span></span></div>
+    </div></div>
+  </div>
+
+  <div id="plugin"><div class="bar"><img src="logo.svg" alt="">Open HTML to Figma<i>✕</i></div><iframe></iframe></div>
+
+  <div id="file"><b><svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M3.5 2.5h6l3 3V13.5h-9v-11z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.5 2.5V5.5H12.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></b>landing-page.html</div>
+
+  <div class="caption" id="c1"><div class="pill"><b>1</b>Drop in a local HTML file</div></div>
+  <div class="caption" id="c2"><div class="pill"><b>2</b>Hit Import: it renders the page like a browser</div></div>
+  <div class="caption" id="c3"><div class="pill"><b>3</b>Get real, editable Figma layers</div></div>
+
+  <div class="stack" id="end" style="gap: 26px;">
+    <img class="logo" src="logo.svg" alt="" style="width: 200px;">
+    <h1 style="font-size: 112px;">Open HTML to Figma</h1>
+    <p class="lede" style="font-size: 38px;">Free &amp; open source Figma plugin</p>
+    <p class="pill" style="margin: 8px 0 0;">github.com/kevicebryan/open-htmltofigma</p>
+    <p class="lede" style="font-size: 26px; margin-top: 6px;">Brewed by Kevin</p>
+  </div>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2.5v17.2l4.6-4.3 3 6.6 3-1.4-3-6.4h6.2z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+
+<script>
+  const DURATION = 20500;
+  const $ = (s) => document.querySelector(s);
+  const clamp = (x) => Math.min(1, Math.max(0, x));
+  const prog = (t, a, b) => clamp((t - a) / (b - a));
+  const ease = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+  const out = (p) => 1 - Math.pow(1 - p, 3);
+  const pop = (p) => (p >= 1 ? 1 : 1 - Math.pow(2, -9 * p) * Math.cos(p * 9)); // springy overshoot
+  const lerp = (a, b, p) => a + (b - a) * p;
+  function put(el, o, x, y, s) { el.style.opacity = o; el.style.transform = 'translate(' + (x || 0) + 'px,' + (y || 0) + 'px) scale(' + (s == null ? 1 : s) + ')'; }
+  // Fade/slide in over [a, a + d], out over [b, b + d].
+  function inOut(t, a, b, d) { return Math.min(out(prog(t, a, a + d)), 1 - prog(t, b, b + d)); }
+
+  // Real layer names from the import (Figma lists the last child first).
+  const ROWS = [
+    [0, '▾', '#', 'HTML Import · 1440px'], [1, '▸', '#', 'nav.nav'], [1, '▸', '#', 'section.wrap'],
+    [1, '▸', '#', 'section.wrap.lists'], [1, '▸', '#', 'section.features'], [1, '▸', '#', 'footer'],
+    [1, '▸', '#', 'section.shapes'], [1, '▾', '#', 'header.hero'], [2, '▾', '#', 'div.wrap'],
+    [3, '▾', '#', 'div.actions'], [4, '', '#', 'a.btn.btn-ghost'], [4, '', '#', 'a.btn.btn-primary', 'primary'],
+    [3, '', '#', 'p.lead', 'lead'], [3, '', 'T', 'Ship pixel-perfect designs from plain HTML', 'title'], [3, '', '#', 'span.eyebrow']
+  ];
+  // Frame-space boxes (from the import's metadata) and when each gets selected.
+  const PICKS = [
+    { key: 'title', t: 13000, x: 330, y: 292.66, w: 781, h: 135, size: '781 × 135' },
+    { key: 'lead', t: 14100, x: 330, y: 447.15, w: 620, h: 86.39, size: '620 × 86.39' },
+    { key: 'primary', t: 15200, x: 330, y: 561.54, w: 101.69, h: 39, size: '101.69 × 39' }
+  ];
+  const SCAN = [[0, 0, 1440, 65], [191, 20, 87, 25], [572, 24, 245, 17], [1110, 13, 138, 39], [330, 246, 105, 27],
+    [330, 293, 781, 135], [330, 447, 620, 86], [330, 562, 102, 39], [444, 562, 125, 39],
+    [192, 862, 250, 238], [466, 862, 250, 238], [739, 862, 509, 238]];
+
+  const layers = $('#layers');
+  const rows = ROWS.map(function (r) {
+    const el = document.createElement('div');
+    el.className = 'row';
+    el.style.paddingLeft = 12 + r[0] * 14 + 'px';
+    el.innerHTML = '<i>' + r[1] + '</i><u>' + r[2] + '</u><em></em>';
+    el.querySelector('em').textContent = r[3];
+    el.dataset.key = r[4] || '';
+    layers.appendChild(el);
+    return el;
+  });
+  const scanBoxes = SCAN.map(function (b) {
+    const el = document.createElement('div');
+    el.className = 'box';
+    el.style.cssText = 'left:' + b[0] * 0.62 + 'px;top:' + b[1] * 0.62 + 'px;width:' + b[2] * 0.62 + 'px;height:' + b[3] * 0.62 + 'px';
+    $('#scan').appendChild(el);
+    return { el: el, y: b[1] * 0.62 };
+  });
+
+  const ui = $('#plugin iframe');
+  const page = $('#browser iframe');
+  let d, html, spots;
+  const loadFrame = (f, src) => new Promise((res) => { f.addEventListener('load', res, { once: true }); f.src = src; });
+  window.ready = Promise.all([
+    loadFrame(ui, '../ui.html'),
+    loadFrame(page, '../examples/kitchen-sink.html'),
+    fetch('../examples/kitchen-sink.html').then((r) => r.text()).then((s) => { html = s; }),
+    document.fonts.ready,
+    Promise.all(Array.from(document.images).map((i) => i.decode()))
+  ]).then(async function () {
+    d = ui.contentDocument;
+    await d.fonts.ready;
+    await page.contentDocument.fonts.ready;
+    // Plugin coordinates → page coordinates (window at 1342,124; 52px bar; scale 1.3).
+    const at = (id, fx, fy) => { const r = d.getElementById(id).getBoundingClientRect(); return [1342 + (r.left + r.width * fx) * 1.3, 124 + 52 + (r.top + r.height * fy) * 1.3]; };
+    spots = { tile: at('file-zone', 0.3, 0.5), button: at('convert', 0.5, 0.5) };
+  });
+
+  // Plugin states, in order, using the same strings ui.html shows.
+  function status(text, kind) { const el = d.getElementById('status'); el.textContent = text; el.className = kind || ''; }
+  function loading(label) { const b = d.getElementById('convert'); b.disabled = true; b.classList.add('loading'); d.getElementById('convert-label').textContent = label; }
+  const PHASES = [
+    [5700, function () {
+      d.getElementById('file-zone').classList.add('has-file');
+      d.getElementById('file-title').textContent = 'landing-page.html';
+      d.getElementById('file-desc').textContent = '12 KB loaded';
+      d.getElementById('html').value = html;
+      status('File loaded — ready to import');
+    }],
+    [7700, function () { loading('Rendering page…'); status('Rendering at 1440 × 1024…'); }],
+    [8600, function () { status('Loading page assets…'); }],
+    [9300, function () { status('Measuring layout…'); }],
+    [10800, function () { loading('Creating Figma layers…'); status('Importing…'); }],
+    [12000, function () {
+      const b = d.getElementById('convert');
+      b.disabled = false; b.classList.remove('loading');
+      d.getElementById('convert-label').textContent = 'Import to Figma';
+      status('Imported · 185 layers', 'ok');
+    }]
+  ];
+  let applied = 0;
+
+  // Step every CSS animation/transition (in this page and the plugin) to its age at t.
+  const born = new WeakMap();
+  function sync(doc, t) {
+    for (const a of doc.getAnimations()) {
+      if (!born.has(a)) born.set(a, t);
+      a.pause();
+      a.currentTime = t - born.get(a);
+    }
+  }
+
+  function cursorAt(t) {
+    const chip = [300, 915];
+    const path = [
+      [3900, [760, 1120]], [4600, chip], [4850, chip], [5650, spots.tile], [6200, spots.tile], [7300, spots.button],
+      [8000, spots.button], [8900, [1180, 760]], [12500, [1180, 760]], [13000, [250, 691]], [13600, [250, 691]],
+      [14100, [250, 663]], [14700, [250, 663]], [15200, [250, 635]], [16300, [250, 635]]
+    ];
+    for (let i = 1; i < path.length; i++) {
+      if (t <= path[i][0]) {
+        const a = path[i - 1], b = path[i], p = ease(prog(t, a[0], b[0]));
+        const arc = i === 4 ? Math.sin(p * Math.PI) * -160 : 0; // the drag arcs up
+        return [lerp(a[1][0], b[1][0], p), lerp(a[1][1], b[1][1], p) + arc];
+      }
+    }
+    return path[path.length - 1][1];
+  }
+
+  window.render = function (t) {
+    while (applied < PHASES.length && PHASES[applied][0] <= t) PHASES[applied++][1]();
+
+    // Intro
+    const intro = $('#intro').children;
+    $('#intro').style.opacity = 1 - prog(t, 2400, 3000);
+    $('#intro').style.transform = 'scale(' + lerp(1, 0.94, ease(prog(t, 2400, 3000))) + ')';
+    put(intro[0], prog(t, 0, 250), 0, 0, lerp(0.5, 1, pop(prog(t, 0, 900))));
+    put(intro[1], out(prog(t, 300, 1000)), 0, lerp(40, 0, out(prog(t, 300, 1000))));
+    put(intro[2], out(prog(t, 700, 1400)), 0, lerp(30, 0, out(prog(t, 700, 1400))));
+
+    // Workspace
+    const w = inOut(t, 2900, 16400, 600);
+    put($('#brand'), w, lerp(-30, 0, out(prog(t, 2900, 3500))));
+    const inB = out(prog(t, 2900, 3700));
+    put($('#browser'), Math.min(inB, 1 - prog(t, 11200, 11600)), lerp(-140, 0, inB), 0, lerp(1, 0.95, ease(prog(t, 11200, 11600))));
+    const inP = out(prog(t, 3200, 4000));
+    put($('#plugin'), Math.min(inP, 1 - prog(t, 16400, 17000)), lerp(160, 0, inP), 0, lerp(1, 0.96, ease(prog(t, 16400, 17000))));
+    const inF = out(prog(t, 11600, 12200));
+    put($('#figma'), Math.min(inF, 1 - prog(t, 16400, 17000)), 0, 0, lerp(0.97, 1, inF) * lerp(1, 0.96, ease(prog(t, 16400, 17000))));
+
+    // File chip: appears, gets dragged along the cursor, drops into the plugin
+    const c = cursorAt(t);
+    const chipIn = pop(prog(t, 4000, 4500));
+    const lift = out(prog(t, 4700, 4850));
+    const drop = prog(t, 5650, 5850);
+    const dragging = t >= 4850;
+    put($('#file'), Math.min(prog(t, 4000, 4150), 1 - drop), dragging ? c[0] - 300 : 0, dragging ? c[1] - 915 : 0, lerp(0.6, 1, chipIn) * lerp(1, 1.06, lift) * lerp(1, 0.3, drop));
+
+    // Cursor + click ripple
+    const press = (t >= 4700 && t < 5650) || (t >= 7550 && t < 7700) || [13000, 14100, 15200].some((k) => t >= k && t < k + 150);
+    put($('#cursor'), Math.min(prog(t, 3900, 4200), 1 - prog(t, 16300, 16600)), c[0] - 4, c[1] - 3, press ? 0.88 : 1);
+    const clicks = [4700, 7550, 13000, 14100, 15200];
+    const k = clicks.filter((x) => x <= t).pop();
+    const rp = k == null ? 1 : prog(t, k, k + 450);
+    const rc = k == null ? c : cursorAt(k);
+    put($('#ripple'), (1 - rp) * (k == null ? 0 : 1), rc[0], rc[1], lerp(0.3, 1.4, out(rp)));
+
+    // Plugin: drop-target glow and the button press, as inline styles so ui.html's own transitions run
+    if (d) {
+      d.getElementById('file-zone').style.boxShadow = t >= 5250 && t < 5650 ? 'inset 0 0 0 2px #ff8fb3, 0 0 0 4px rgba(255, 143, 179, 0.5)' : '';
+      d.getElementById('convert').style.transform = t >= 7550 && t < 7700 ? 'scale(0.96)' : '';
+    }
+
+    // Scan line over the page while it's measured
+    const sp = prog(t, 9300, 10800);
+    const scanY = lerp(-10, 568, ease(sp));
+    $('#scan .line').style.top = scanY + 'px';
+    $('#scan').style.opacity = t >= 9300 && t < 11200 ? 1 - prog(t, 10800, 11200) : 0;
+    scanBoxes.forEach(function (b) { b.el.style.opacity = t >= 9300 && scanY > b.y ? 1 - prog(t, 10800, 11200) : 0; });
+
+    // Figma: rows cascade in, picks select a layer and its box, the canvas slowly zooms
+    rows.forEach(function (r, i) {
+      r.style.opacity = out(prog(t, 12200 + i * 40, 12500 + i * 40));
+      const pick = PICKS.filter((p) => p.t <= t).pop();
+      r.classList.toggle('on', !!pick && r.dataset.key === pick.key);
+    });
+    const pick = PICKS.filter((p) => p.t <= t).pop();
+    const hl = $('#hl');
+    if (pick) {
+      const f = 600 / 1440;
+      hl.style.cssText = 'left:' + (28 + pick.x * f) + 'px;top:' + (40 + pick.y * f) + 'px;width:' + pick.w * f + 'px;height:' + pick.h * f + 'px;opacity:' + out(prog(t, pick.t, pick.t + 200));
+      hl.querySelector('span').textContent = pick.size;
+    }
+    $('#zoom').style.transform = 'scale(' + lerp(1, 1.35, ease(prog(t, 12300, 16400))) + ')';
+
+    // Captions
+    put($('#c1'), inOut(t, 3300, 6300, 300), 0, lerp(16, 0, out(prog(t, 3300, 3600))));
+    put($('#c2'), inOut(t, 6650, 11200, 300), 0, lerp(16, 0, out(prog(t, 6650, 6950))));
+    put($('#c3'), inOut(t, 11600, 16300, 300), 0, lerp(16, 0, out(prog(t, 11600, 11900))));
+
+    // End card
+    const end = $('#end').children;
+    $('#end').style.opacity = prog(t, 16900, 17100);
+    put(end[0], prog(t, 16900, 17100), 0, 0, lerp(0.5, 1, pop(prog(t, 16900, 17800))));
+    [17100, 17300, 17500, 17700].forEach(function (a, i) { put(end[i + 1], out(prog(t, a, a + 700)), 0, lerp(34, 0, out(prog(t, a, a + 700)))); });
+
+    if (d) { sync(d, t); sync(page.contentDocument, t); }
+    sync(document, t);
+  };
+</script>
+</body>
+</html>

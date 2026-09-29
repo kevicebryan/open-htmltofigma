@@ -67,7 +67,7 @@ interface Ctx {
   colors: Map<string, Rgba>;
 }
 
-figma.showUI(__html__, { width: 360, height: 560, themeColors: true });
+figma.showUI(__html__, { width: 360, height: 600, themeColors: true });
 
 figma.ui.onmessage = async (msg: {
   type: string;

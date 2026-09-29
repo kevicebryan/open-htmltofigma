@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Open HTML to Figma</title>
+  <defs>
+    <path id="ear" d="M-60 96C-70 8-40-92-16-122Q0-140 16-122C40-92 70 8 60 96Z"/>
+    <clipPath id="tip"><path d="M-80-150H80V-26Q0-2-80-26Z"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="#74B087"/>
+  <g transform="translate(168 150) rotate(-34)"><use href="#ear" fill="#fff"/><use href="#ear" fill="#FF8FB3" clip-path="url(#tip)"/></g>
+  <g transform="translate(388 146) rotate(27)"><use href="#ear" fill="#fff"/><use href="#ear" fill="#FF8FB3" clip-path="url(#tip)"/></g>
+  <ellipse cx="322" cy="392" rx="236" ry="214" fill="#fff"/>
+  <g fill="#5E1F3D">
+    <ellipse cx="240" cy="335" rx="21" ry="27"/>
+    <ellipse cx="362" cy="335" rx="21" ry="27"/>
+    <path d="M284 380h34a17 17 0 0 1-34 0z" stroke="#5E1F3D" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <g fill="#FF8FB3">
+    <circle cx="176" cy="408" r="40"/>
+    <circle cx="424" cy="408" r="40"/>
+  </g>
+</svg>

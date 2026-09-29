@@ -7,7 +7,7 @@
  * This side only rebuilds it: nested Frames with parent-relative positions,
  * rich Text, native gradients/images/vectors.
  */
-figma.showUI(__html__, { width: 360, height: 560, themeColors: true });
+figma.showUI(__html__, { width: 360, height: 600, themeColors: true });
 figma.ui.onmessage = async (msg) => {
     if (msg.type !== 'convert' || !msg.tree)
         return;

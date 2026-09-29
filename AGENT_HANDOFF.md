@@ -33,6 +33,11 @@ The current output intentionally uses absolute positioning. Do not add Auto Layo
 | `manifest.json` | Figma plugin entry points and network permissions |
 | `examples/` | Sample documents used for manual visual regression testing (`kitchen-sink.html` covers most features; `tailwind-cdn.html` needs page scripts) |
 | `test/check.html` | Runs the real capture on `examples/kitchen-sink.html` and asserts the tree (serve the repo root, open `/test/check.html`) |
+| `docs/` | Logo (`logo.svg`), Community icon (`icon.png`) and promo media. `promo.html` renders the image boards, `demo.html` + `record.mjs` record `demo.mp4`; both embed the live `ui.html` |
+
+## UI styling
+
+The UI is a "strawberry matcha" liquid-glass theme (tokens at the top of `ui.html`'s `<style>`; Nunito is inlined so the UI makes no network requests). The mascot reacts purely in CSS through `:has()` on hooks the script already sets: `#convert.loading` (charging), `#status.ok` (happy) and `#status.error` (droopy ears). Keep those IDs and classes when changing the markup, and keep the plugin height (`figma.showUI`, 360 × 600) in sync with the layout.
 
 ## Non-negotiable UX behavior
 
