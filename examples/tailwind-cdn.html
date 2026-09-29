@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tailwind CDN — needs “Execute page scripts”</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 font-sans text-slate-900 antialiased">
+  <header class="flex items-center justify-between px-10 py-5 border-b border-slate-200 bg-white/80 backdrop-blur">
+    <span class="text-xl font-extrabold tracking-tight">acme<span class="text-indigo-600">.</span></span>
+    <nav class="flex gap-8 text-sm text-slate-600">
+      <a href="#" class="hover:text-slate-900">Features</a><a href="#">Pricing</a><a href="#">About</a>
+    </nav>
+    <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm ring-1 ring-indigo-500">Sign in</button>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-10 py-20">
+    <p class="mb-4 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-indigo-700">
+      <span class="h-1.5 w-1.5 rounded-full bg-indigo-500"></span> Now in beta
+    </p>
+    <h1 class="max-w-3xl text-6xl font-black leading-tight tracking-tight">
+      Build faster with <span class="bg-gradient-to-r from-indigo-600 to-pink-500 bg-clip-text text-transparent">utility classes</span>
+    </h1>
+    <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+      This page is styled entirely by the Tailwind Play CDN script, so it only looks right when
+      page scripts are executed. <a href="https://tailwindcss.com" class="font-semibold text-indigo-600 underline decoration-2 underline-offset-4">Read the docs</a>.
+    </p>
+
+    <div class="mt-12 grid grid-cols-3 gap-6">
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/50">
+        <div class="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <h3 class="font-semibold">Fast</h3>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Generated on the fly in the browser.</p>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/50">
+        <div class="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-pink-100 text-pink-600">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        </div>
+        <h3 class="font-semibold">Loved</h3>
+        <p class="mt-2 text-sm leading-6 text-slate-500">Rings, shadows and gradients map to Figma effects.</p>
+      </div>
+      <div class="rounded-2xl bg-slate-900 p-6 text-white">
+        <h3 class="font-semibold">Dark card</h3>
+        <ul class="mt-3 space-y-2 text-sm text-slate-300">
+          <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Space utilities</li>
+          <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Divide utilities</li>
+        </ul>
+        <div class="mt-6 h-2 w-full rounded-full bg-white/10"><div class="h-2 w-2/3 rounded-full bg-emerald-400"></div></div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

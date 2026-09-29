@@ -6,11 +6,8 @@
   "ui": "ui.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": [
-      "https://fonts.googleapis.com",
-      "https://fonts.gstatic.com"
-    ],
-    "reasoning": "Pasted HTML often loads Google Fonts (e.g. Playfair Display, Figtree). The plugin must fetch those stylesheets and font files so measured layout and typography match the source page."
+    "allowedDomains": ["*"],
+    "reasoning": "The plugin renders the user's own HTML exactly like a browser would, so it must load whatever that page references: stylesheets and scripts from CDNs (Tailwind, Bootstrap, Font Awesome), web fonts (Google Fonts and others) and images from any host. Nothing is sent anywhere except the requests the page itself makes."
   },
   "documentAccess": "dynamic-page"
 }
