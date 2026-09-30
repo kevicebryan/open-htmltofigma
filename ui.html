@@ -638,6 +638,7 @@
     const folderInput = document.getElementById('folder');
     let assetFiles = []; // local CSS / JS / images / fonts picked with the page
     let sourceName = ''; // picked file's name, used to name the Figma frame
+    htmlInput.addEventListener('input', function () { sourceName = ''; }); // pasted HTML isn't the file any more
 
     let isImporting = false;
     let importTimeout = null;

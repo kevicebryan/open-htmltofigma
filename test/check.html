@@ -31,6 +31,8 @@
       check('transparent stop keeps the neighbour hue', fade[0].color.r === 1 && fade[0].color.a === 0);
       const clipped = ui.gradientStops(['rgb(0, 0, 0)', 'rgb(255, 255, 255) 200%'], 100);
       check('stops past 100% are cut at the interpolated colour', Math.abs(clipped[1].color.r - 0.5) < 0.01);
+      check('text-align start/end follow direction', ui.mapAlign('start', 'rtl') === 'RIGHT' && ui.mapAlign('end', 'rtl') === 'LEFT' &&
+        ui.mapAlign('start', 'ltr') === 'LEFT' && ui.mapAlign('end', 'ltr') === 'RIGHT');
       check('whitespace collapses like CSS', ui.collapseWs('  a \n\t b  ', 'collapse').text === ' a b ');
       check('a chat code fence is stripped from pasted HTML', ui.readPasted('```html\n<p>Hi</p>\n```').html === '<p>Hi</p>');
       check('pasted React is recognised, a page that loads React is not',
