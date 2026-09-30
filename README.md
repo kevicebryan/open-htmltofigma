@@ -54,11 +54,14 @@ npm install && npm run build
 
 | Step | What to do |
 | --- | --- |
-| **Viewport** | Desktop (1440 × 1024), Laptop (1280 × 832), Tablet (768 × 1024) or Mobile (390 × 844). Media queries and `vh` units resolve against it. |
+| **Viewport** | Desktop (1440 × 1024), Laptop (1280 × 832), Tablet (768 × 1024), Mobile (390 × 844), Slide (1920 × 1080), A4 (794 × 1123) or Letter (816 × 1056), or type any size. Media queries and `vh` units resolve against it. |
 | **File** | Choose an `.html` file. If it uses local CSS, images or fonts, select them together with the page, or use **or pick its folder**, so relative `href` / `src` / `url()` references resolve. |
-| **Or paste** | Paste HTML straight into the text box. |
+| **Or paste** | Paste HTML straight into the text box. A code block copied from the chat, fence and all, works too. React components can't be imported; the plugin says so and points you to **Copy AI prompt**. |
+| **Copy AI prompt** | Copies a request to add to your AI chat, so it answers with one self-contained HTML file laid out for the size you picked. |
 | **Create as component** | The imported root becomes a Component instead of a Frame. |
 | **Execute page scripts** | For JS-rendered pages (Tailwind Play CDN, content built by a `<script>`). Entrance and scroll-reveal animations are settled before measuring. Off by default; only enable it for HTML you trust. |
+
+The plugin remembers your viewport and **Create as component** between runs. **Execute page scripts** always starts off.
 
 The import lands in the middle of your viewport, selected and zoomed to fit. It is named `HTML Import · 1440px` (or `HTML Component · …`). Its 40 most-used colors become local color styles under `HTML/`, linked to every layer that uses them, so editing one style recolors the whole import.
 

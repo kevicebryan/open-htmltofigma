@@ -9,6 +9,14 @@
  */
 figma.showUI(__html__, { width: 360, height: 600, themeColors: true });
 figma.ui.onmessage = async (msg) => {
+    if (msg.type === 'load-settings') {
+        figma.ui.postMessage({ type: 'settings', settings: await figma.clientStorage.getAsync('settings') });
+        return;
+    }
+    if (msg.type === 'save-settings') {
+        await figma.clientStorage.setAsync('settings', msg.settings);
+        return;
+    }
     if (msg.type !== 'convert' || !msg.tree)
         return;
     try {

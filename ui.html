@@ -164,7 +164,7 @@
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       padding: 3px;
-      border-radius: 999px;
+      border-radius: 17px;
       background: var(--well);
       box-shadow: inset 0 1px 3px rgba(20, 51, 38, 0.16), inset 0 -1px 0 rgba(255, 255, 255, 0.6);
     }
@@ -173,19 +173,21 @@
       content: "";
       position: absolute;
       top: 3px;
-      bottom: 3px;
       left: 3px;
       width: calc((100% - 6px) / 4);
+      height: calc((100% - 6px) / 2);
       border-radius: 999px;
       background: linear-gradient(#fff, #f6fbf7);
       box-shadow: 0 3px 8px -2px rgba(16, 60, 36, 0.3), inset 0 -1px 1px rgba(16, 60, 36, 0.06);
-      transform: translateX(calc(var(--i, 0) * 100%));
+      transform: translate(calc(var(--i, 0) * 100%), calc(var(--r, 0) * 100%));
       transition: transform 0.5s var(--spring);
     }
 
-    .segment:has(> :nth-child(2).active) { --i: 1; }
-    .segment:has(> :nth-child(3).active) { --i: 2; }
-    .segment:has(> :nth-child(4).active) { --i: 3; }
+    /* Two rows of four: screens on top, slides and paper below. */
+    .segment:has(> :nth-child(4n+2).active) { --i: 1; }
+    .segment:has(> :nth-child(4n+3).active) { --i: 2; }
+    .segment:has(> :nth-child(4n+4).active) { --i: 3; }
+    .segment:has(> :nth-child(n+5).active) { --r: 1; }
 
     .segment button {
       position: relative;
@@ -319,29 +321,42 @@
 
     .file-meta .desc { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .divider {
-      display: flex;
+    /* The chosen size, editable: typing one switches the viewport to Custom. */
+    .size {
+      display: inline-flex;
       align-items: center;
-      gap: 10px;
-      margin: 8px 4px;
-      color: var(--muted);
-      font: 800 10px/1 var(--font);
-      letter-spacing: 0.09em;
-      text-transform: uppercase;
+      gap: 4px;
+      margin: -4px 0 -3px;
+      letter-spacing: 0;
     }
 
-    .divider::before,
-    .divider::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: var(--line);
+    .size input {
+      width: 44px;
+      height: 19px;
+      padding: 0 4px;
+      border: 0;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.5);
+      box-shadow: inset 0 1px 2px rgba(20, 51, 38, 0.14);
+      color: var(--ink);
+      font: 700 11px/1 var(--font);
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+
+    .size input::-webkit-inner-spin-button,
+    .size input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    .size input:focus {
+      outline: none;
+      background: rgba(255, 255, 255, 0.8);
+      box-shadow: inset 0 1px 2px rgba(20, 51, 38, 0.1), 0 0 0 2px rgba(255, 143, 179, 0.6);
     }
 
     textarea {
       display: block;
       width: 100%;
-      height: 80px;
+      height: 72px;
       resize: vertical;
       padding: 10px 12px;
       border: 0;
@@ -533,12 +548,21 @@
 
   <main class="card">
     <div class="field">
-      <span class="field-label">Viewport</span>
+      <span class="field-label">Viewport
+        <span class="size">
+          <input id="size-w" type="number" min="100" max="4000" value="1440" aria-label="Width in pixels" /> ×
+          <input id="size-h" type="number" min="100" max="4000" value="1024" aria-label="Height in pixels" />
+        </span>
+      </span>
       <div class="segment" id="viewports">
-        <button type="button" data-w="1440" data-h="1024" class="active">Desktop</button>
-        <button type="button" data-w="1280" data-h="832">Laptop</button>
-        <button type="button" data-w="768" data-h="1024">Tablet</button>
-        <button type="button" data-w="390" data-h="844">Mobile</button>
+        <button type="button" data-size="desktop" data-w="1440" data-h="1024" class="active" aria-pressed="true">Desktop</button>
+        <button type="button" data-size="laptop" data-w="1280" data-h="832" aria-pressed="false">Laptop</button>
+        <button type="button" data-size="tablet" data-w="768" data-h="1024" aria-pressed="false">Tablet</button>
+        <button type="button" data-size="mobile" data-w="390" data-h="844" aria-pressed="false">Mobile</button>
+        <button type="button" data-size="slide" data-w="1920" data-h="1080" aria-pressed="false">Slide</button>
+        <button type="button" data-size="a4" data-w="794" data-h="1123" aria-pressed="false">A4</button>
+        <button type="button" data-size="letter" data-w="816" data-h="1056" aria-pressed="false">Letter</button>
+        <button type="button" data-size="custom" aria-pressed="false">Custom</button>
       </div>
     </div>
 
@@ -574,7 +598,7 @@
       <input id="folder" type="file" webkitdirectory hidden />
     </div>
 
-    <div class="divider">or paste</div>
+    <span class="field-label">Or paste HTML <button type="button" class="link" id="copy-prompt">Copy AI prompt</button></span>
 
     <textarea id="html" placeholder="Paste your HTML here…" spellcheck="false" aria-label="HTML"></textarea>
   </main>
@@ -607,22 +631,116 @@
     const statusEl = document.getElementById('status');
     const renderHost = document.getElementById('render-host');
     const viewportBtns = document.querySelectorAll('#viewports button');
+    const sizeW = document.getElementById('size-w');
+    const sizeH = document.getElementById('size-h');
     const asComponentInput = document.getElementById('as-component');
     const runScriptsInput = document.getElementById('run-scripts');
     const folderInput = document.getElementById('folder');
     let assetFiles = []; // local CSS / JS / images / fonts picked with the page
 
-    let viewport = { w: 1440, h: 1024 };
     let isImporting = false;
     let importTimeout = null;
     let scriptsSkipped = false;
 
+    const clampSize = function (v, fallback) { return Math.min(4000, Math.max(100, parseInt(v, 10) || fallback)); };
+
+    /** Presets fill in the size; typing a size of your own switches to Custom. */
+    function selectSize(key) {
+      viewportBtns.forEach(function (b) {
+        const on = b.getAttribute('data-size') === key;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', on);
+        if (on && b.hasAttribute('data-w')) {
+          sizeW.value = b.getAttribute('data-w');
+          sizeH.value = b.getAttribute('data-h');
+        }
+      });
+    }
+
+    function sizeKey() {
+      const active = document.querySelector('#viewports .active');
+      return active ? active.getAttribute('data-size') : 'custom';
+    }
+
+    // The main thread keeps these in figma.clientStorage. "Execute page scripts" is left out on
+    // purpose: running a page's scripts should stay a fresh choice for each page.
+    function saveSettings() {
+      parent.postMessage({ pluginMessage: { type: 'save-settings', settings: {
+        size: sizeKey(), w: sizeW.value, h: sizeH.value, asComponent: asComponentInput.checked
+      } } }, '*');
+    }
+
+    function applySettings(s) {
+      if (!s) return;
+      if (Array.prototype.some.call(viewportBtns, function (b) { return b.getAttribute('data-size') === s.size; })) selectSize(s.size);
+      if (s.size === 'custom') {
+        sizeW.value = clampSize(s.w, 1440);
+        sizeH.value = clampSize(s.h, 1024);
+      }
+      asComponentInput.checked = !!s.asComponent;
+    }
+
     viewportBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        viewportBtns.forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        viewport = { w: parseInt(btn.getAttribute('data-w'), 10), h: parseInt(btn.getAttribute('data-h'), 10) };
+        selectSize(btn.getAttribute('data-size'));
+        if (!btn.hasAttribute('data-w')) sizeW.select();
+        saveSettings();
       });
+    });
+    [sizeW, sizeH].forEach(function (input) {
+      input.addEventListener('input', function () { selectSize('custom'); });
+      input.addEventListener('change', function () {
+        input.value = clampSize(input.value, input === sizeW ? 1440 : 1024);
+        saveSettings();
+      });
+    });
+    asComponentInput.addEventListener('change', saveSettings);
+
+    /** What was pasted, minus a chat's ``` code fence. `react` flags a component rather than a page. */
+    function readPasted(text) {
+      let src = text.trim();
+      const fenced = /^```[\w-]*\n([\s\S]*?)\n?```$/.exec(src);
+      if (fenced) src = fenced[1].trim();
+      return { html: src, react: src.charAt(0) !== '<' && /\b(import|export)\s|className=|useState\(/.test(src) };
+    }
+
+    /** A request to add to an AI chat, so what comes back imports cleanly at the chosen size. */
+    function aiPrompt() {
+      const pages = {
+        slide: 'Make each slide a <section> exactly 1920 × 1080 px, stacked top to bottom with no gaps.',
+        a4: 'Make each page a <section> exactly 794 × 1123 px (A4), stacked top to bottom.',
+        letter: 'Make each page a <section> exactly 816 × 1056 px (US Letter), stacked top to bottom.'
+      };
+      return [
+        'Please give me this as one self-contained HTML file that I can import into Figma:',
+        '- Plain HTML with the CSS in a <style> tag. No React, no build step, and no JavaScript unless the page needs it.',
+        '- Lay it out for a ' + clampSize(sizeW.value, 1440) + ' px wide window.',
+        pages[sizeKey()] ? '- ' + pages[sizeKey()] : '',
+        '- Fonts from Google Fonts (a <link> tag) or system fonts.',
+        '- Inline <svg> for icons. Images as https:// URLs or data: URIs.',
+        '- Everything visible on load: no fade-in or scroll-triggered animations.'
+      ].filter(Boolean).join('\n');
+    }
+
+    document.getElementById('copy-prompt').addEventListener('click', async function () {
+      const text = aiPrompt();
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (e) {
+        // Figma's plugin iframe blocks the async clipboard; the older copy command still works there.
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand('copy');
+        ta.remove();
+      }
+      setStatus(copied
+        ? 'Prompt copied. Add it to your request in the AI chat, then paste the HTML you get back.'
+        : 'Could not copy the prompt here.', copied ? '' : 'error');
     });
 
     function setStatus(message, kind) {
@@ -2593,14 +2711,22 @@
 
     convertBtn.addEventListener('click', async function () {
       if (isImporting) return;
-      const html = htmlInput.value.trim();
+      const pasted = readPasted(htmlInput.value);
+      const html = pasted.html;
       if (!html) {
         setStatus('Choose an HTML file to import, or paste HTML below.', 'error');
         fileInput.click();
         return;
       }
 
-      const opts = { width: viewport.w, height: viewport.h, runScripts: runScriptsInput.checked };
+      if (pasted.react) {
+        setStatus('This looks like React code, not HTML. Ask your AI for one self-contained HTML file instead: “Copy AI prompt” has the wording.', 'error');
+        return;
+      }
+
+      const opts = { width: clampSize(sizeW.value, 1440), height: clampSize(sizeH.value, 1024), runScripts: runScriptsInput.checked };
+      sizeW.value = opts.width;
+      sizeH.value = opts.height;
       scriptsSkipped = !opts.runScripts && /<script\b/i.test(html);
       setImporting(true, 'Rendering page…');
       setStatus('Rendering at ' + opts.width + ' × ' + opts.height + '…');
@@ -2635,7 +2761,9 @@
 
     onmessage = function (event) {
       const msg = event.data && event.data.pluginMessage;
-      if (!msg || msg.type === 'convert') return;
+      if (!msg) return;
+      if (msg.type === 'settings') return applySettings(msg.settings);
+      if (msg.type !== 'done' && msg.type !== 'error') return;
       setImporting(false);
       if (msg.type === 'done') {
         let text = 'Imported · ' + msg.count + ' layers' + (msg.styles ? ' · ' + msg.styles + ' colors' : '');
@@ -2648,6 +2776,8 @@
         setStatus(msg.message, 'error');
       }
     };
+
+    parent.postMessage({ pluginMessage: { type: 'load-settings' } }, '*');
 
     const mochi = document.querySelector('.mochi');
 

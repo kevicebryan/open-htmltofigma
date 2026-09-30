@@ -41,10 +41,11 @@ The UI is a "strawberry matcha" liquid-glass theme (tokens at the top of `ui.htm
 
 It is also interactive: its eyes follow the pointer (`--lx` / `--ly`, set on `pointermove`), its ears perk up on hover, and a `pointerdown` boop plays a squish through `element.animate()`.
 
-kevbry.in/open-html-to-figma embeds a verbatim copy of `ui.html` as a playground. That page replaces the global `captureHtmlTree` (it calls `setStatus` for the steps) and answers the `convert` message with `done`, so renaming either function breaks the playground.
+kevbry.in/open-html-to-figma embeds a verbatim copy of `ui.html` as a playground. That page replaces the global `captureHtmlTree` (it calls `setStatus` for the steps) and answers the `convert` message with `done`, so renaming either function breaks the playground. The UI also posts `load-settings` / `save-settings` to its parent (the main thread keeps them in `figma.clientStorage`); the playground ignores both.
 
 ## Non-negotiable UX behavior
 
+- Never remember **Execute page scripts** between runs: running a page's scripts must stay a fresh choice for each page.
 - If there is no pasted HTML when the user clicks import, show a clear error and open the file picker.
 - Reject non-HTML files even when a user bypasses the file-input filter.
 - During conversion, disable the import button, show an animated spinner, and communicate the current phase.

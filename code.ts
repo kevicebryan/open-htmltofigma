@@ -74,7 +74,16 @@ figma.ui.onmessage = async (msg: {
   images?: Record<string, string>;
   viewportWidth?: number;
   asComponent?: boolean;
+  settings?: unknown;
 }) => {
+  if (msg.type === 'load-settings') {
+    figma.ui.postMessage({ type: 'settings', settings: await figma.clientStorage.getAsync('settings') });
+    return;
+  }
+  if (msg.type === 'save-settings') {
+    await figma.clientStorage.setAsync('settings', msg.settings);
+    return;
+  }
   if (msg.type !== 'convert' || !msg.tree) return;
   try {
     const [images, fonts] = await Promise.all([loadImages(msg.tree, msg.images || {}), loadFonts(msg.tree)]);
