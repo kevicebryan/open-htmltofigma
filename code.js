@@ -23,15 +23,16 @@ figma.ui.onmessage = async (msg) => {
         const [images, fonts] = await Promise.all([loadImages(msg.tree, msg.images || {}), loadFonts(msg.tree)]);
         const ctx = { images, font: fonts.get };
         let root = build(msg.tree, null, ctx);
-        const suffix = msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '';
-        root.name = 'HTML Import' + suffix;
+        const size = msg.viewportHeight ? `${msg.viewportWidth}×${msg.viewportHeight}px` : `${msg.viewportWidth}px`;
+        const suffix = msg.viewportWidth ? ` · ${size}` : '';
+        root.name = (msg.sourceName || 'HTML Import') + suffix;
         const center = figma.viewport.center;
         root.x = Math.round(center.x - root.width / 2);
         root.y = Math.round(center.y - root.height / 2);
         figma.currentPage.appendChild(root);
         if (msg.asComponent) {
             root = figma.createComponentFromNode(root);
-            root.name = 'HTML Component' + suffix;
+            root.name = (msg.sourceName || 'HTML Component') + suffix;
         }
         const styles = await linkColorStyles(root);
         figma.currentPage.selection = [root];

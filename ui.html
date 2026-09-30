@@ -637,6 +637,7 @@
     const runScriptsInput = document.getElementById('run-scripts');
     const folderInput = document.getElementById('folder');
     let assetFiles = []; // local CSS / JS / images / fonts picked with the page
+    let sourceName = ''; // picked file's name, used to name the Figma frame
 
     let isImporting = false;
     let importTimeout = null;
@@ -770,6 +771,7 @@
       fileInput.value = '';
       folderInput.value = '';
       assetFiles = [];
+      sourceName = '';
       fileZone.classList.remove('has-file');
       fileTitle.textContent = 'Choose HTML file';
       fileDesc.textContent = '.html, plus its CSS / images if local';
@@ -803,6 +805,7 @@
       try {
         htmlInput.value = await page.text();
         assetFiles = list.filter(function (f) { return f !== page; });
+        sourceName = page.name.replace(/\.[^.]+$/, '');
         fileZone.classList.add('has-file');
         fileTitle.textContent = page.name;
         fileDesc.textContent = Math.max(1, Math.round(page.size / 1024)) + ' KB loaded' +
@@ -1613,7 +1616,9 @@
 
     function isClipText(cs) { return /text/.test(cs.webkitBackgroundClip || '') || /text/.test(cs.backgroundClip || ''); }
 
-    function mapAlign(v) {
+    function mapAlign(v, dir) {
+      // start / end flip in right-to-left text
+      if (dir === 'rtl') v = v === 'start' ? 'right' : v === 'end' ? 'left' : v;
       return /center/.test(v) ? 'CENTER' : /right|end/.test(v) ? 'RIGHT' : v === 'justify' ? 'JUSTIFIED' : 'LEFT';
     }
 
@@ -1775,7 +1780,7 @@
         b.w = right - b.x;
       }
       const text = runs.map(function (r) { return r.text; }).join('');
-      const align = mapAlign(hcs.textAlign);
+      const align = mapAlign(hcs.textAlign, hcs.direction);
       const node = { type: 'text', x: b.x, y: top, w: b.w, h: bottom - top, align: align };
       // Single lines never wrap in Figma; wrapped text keeps the browser's line width.
       node.autoWidth = (n === 1 && text.indexOf('\n') < 0) || /^(pre|nowrap)$/.test(hcs.whiteSpace);
@@ -2208,7 +2213,7 @@
       const lh = st.lineHeight === null ? st.size * 1.2 : st.lineHeight;
       const node = {
         type: 'text', x: cb.x, y: multiline ? cb.y : cb.y + (cb.h - lh) / 2, w: Math.max(cb.w, 1),
-        h: multiline ? cb.h : lh, align: mapAlign(cs.textAlign), autoWidth: false
+        h: multiline ? cb.h : lh, align: mapAlign(cs.textAlign, cs.direction), autoWidth: false
       };
       if (!multiline) node.maxLines = 1;
       node.runs = [cleanRun(Object.assign({}, st, { text: text, lineHeight: lh, color: color || st.color }), node)];
@@ -2742,6 +2747,8 @@
             tree: tree,
             images: imageStore,
             viewportWidth: opts.width,
+            viewportHeight: opts.height,
+            sourceName: sourceName,
             asComponent: asComponentInput.checked
           }
         }, '*');
