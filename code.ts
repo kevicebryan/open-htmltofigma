@@ -64,7 +64,6 @@ interface HtmlNode {
 interface Ctx {
   images: Map<string, string>; // imageRef or url -> Figma image hash
   font: (r: Run) => FontName;
-  colors: Map<string, Rgba>;
 }
 
 figma.showUI(__html__, { width: 360, height: 600, themeColors: true });
@@ -79,7 +78,7 @@ figma.ui.onmessage = async (msg: {
   if (msg.type !== 'convert' || !msg.tree) return;
   try {
     const [images, fonts] = await Promise.all([loadImages(msg.tree, msg.images || {}), loadFonts(msg.tree)]);
-    const ctx: Ctx = { images, font: fonts.get, colors: new Map() };
+    const ctx: Ctx = { images, font: fonts.get };
     let root = build(msg.tree, null, ctx) as FrameNode | ComponentNode;
     const suffix = msg.viewportWidth ? ` · ${msg.viewportWidth}px` : '';
     root.name = 'HTML Import' + suffix;
@@ -91,7 +90,7 @@ figma.ui.onmessage = async (msg: {
       root = figma.createComponentFromNode(root);
       root.name = 'HTML Component' + suffix;
     }
-    const styles = await createLocalColorStyles(ctx.colors);
+    const styles = await linkColorStyles(root);
     figma.currentPage.selection = [root];
     figma.viewport.scrollAndZoomIntoView([root]);
     figma.ui.postMessage({ type: 'done', count: countNodes(root), styles, missingFonts: fonts.missing });
@@ -128,7 +127,7 @@ function build(n: HtmlNode, parent: HtmlNode | null, ctx: Ctx): SceneNode {
     box.x = relX;
     box.y = relY;
     box.fills = paints(n.fills, ctx);
-    applyStroke(box, n, ctx);
+    applyStroke(box, n);
     applyRadius(box, n.radius);
     if (box.type === 'FRAME') {
       box.clipsContent = !!n.clip;
@@ -157,7 +156,7 @@ function buildText(n: HtmlNode, ctx: Ctx): TextNode {
       t.setRangeFontSize(i, end, Math.max(r.size, 1));
       t.setRangeLineHeight(i, end, { unit: 'PIXELS', value: Math.max(r.lineHeight, 0) });
       if (r.letterSpacing) t.setRangeLetterSpacing(i, end, { unit: 'PIXELS', value: r.letterSpacing });
-      t.setRangeFills(i, end, r.fills ? paints(r.fills, ctx) : [solid(r.color, ctx)]);
+      t.setRangeFills(i, end, r.fills ? paints(r.fills, ctx) : [solid(r.color)]);
       if (r.decoration) t.setRangeTextDecoration(i, end, r.decoration);
       if (r.textCase) t.setRangeTextCase(i, end, r.textCase);
       if (r.href) {
@@ -229,15 +228,14 @@ function applyTransform(node: SceneNode, n: HtmlNode, relX: number, relY: number
 // Paints / strokes / effects
 // ---------------------------------------------------------------------------
 
-function solid(c: Rgba, ctx: Ctx): SolidPaint {
-  trackColor(ctx.colors, c);
+function solid(c: Rgba): SolidPaint {
   return { type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a };
 }
 
 function paints(specs: PaintSpec[] | undefined, ctx: Ctx): Paint[] {
   const out: Paint[] = [];
   for (const p of specs || []) {
-    if (p.type === 'SOLID') out.push(solid(p.color, ctx));
+    if (p.type === 'SOLID') out.push(solid(p.color));
     else if (p.type === 'IMAGE') {
       const hash = ctx.images.get(p.imageRef || p.url || '');
       if (hash) out.push({ type: 'IMAGE', scaleMode: p.scaleMode, imageHash: hash });
@@ -246,10 +244,10 @@ function paints(specs: PaintSpec[] | undefined, ctx: Ctx): Paint[] {
   return out;
 }
 
-function applyStroke(node: FrameNode | RectangleNode, n: HtmlNode, ctx: Ctx): void {
+function applyStroke(node: FrameNode | RectangleNode, n: HtmlNode): void {
   const s = n.stroke;
   if (!s) return;
-  node.strokes = [solid(s.color, ctx)];
+  node.strokes = [solid(s.color)];
   node.strokeAlign = 'INSIDE';
   if (s.t === s.r && s.r === s.b && s.b === s.l) node.strokeWeight = s.t;
   else {
@@ -423,29 +421,71 @@ function pickStyle(styles: FontName[], weight: number, italic: boolean): FontNam
 // Local color styles
 // ---------------------------------------------------------------------------
 
-function trackColor(styles: Map<string, Rgba>, c: Rgba): void {
-  if (c.a < 0.05) return;
-  const key = [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255), Math.round(c.a * 100)].join(',');
-  if (!styles.has(key)) styles.set(key, c);
+interface ColorUse {
+  color: RGB;
+  opacity: number;
+  links: ((styleId: string) => Promise<void>)[];
 }
 
-async function createLocalColorStyles(styles: Map<string, Rgba>): Promise<number> {
-  const existing = new Set((await figma.getLocalPaintStylesAsync()).map((s) => s.name));
-  let created = 0;
-  // Cap so imports don't flood the file with hundreds of near-duplicate styles.
-  for (const c of Array.from(styles.values()).slice(0, 40)) {
-    const name = 'HTML/' + rgbToHex(c) + (c.a < 0.999 ? ` @${Math.round(c.a * 100)}%` : '');
-    if (existing.has(name)) continue;
-    const style = figma.createPaintStyle();
-    style.name = name;
-    style.paints = [{ type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a }];
-    existing.add(name);
-    created++;
+/**
+ * Turns the import's most-used solid colors into `HTML/` paint styles and links every
+ * layer (fill, stroke or text run) with that color to its style, so editing one style
+ * recolors the whole import.
+ */
+async function linkColorStyles(root: SceneNode): Promise<number> {
+  const uses = new Map<string, ColorUse>();
+  const note = (p: ReadonlyArray<Paint> | PluginAPI['mixed'], link: ColorUse['links'][number]) => {
+    // Gradients, images and stacked paints keep their own fills: a style would replace all of them.
+    if (p === figma.mixed || p.length !== 1) return;
+    const s = p[0];
+    const a = s.opacity === undefined ? 1 : s.opacity;
+    if (s.type !== 'SOLID' || s.visible === false || (s.blendMode || 'NORMAL') !== 'NORMAL' || a < 0.05) return;
+    const key = colorKey(s.color, a);
+    const use = uses.get(key) || { color: s.color, opacity: a, links: [] };
+    use.links.push(link);
+    uses.set(key, use);
+  };
+  const nodes = 'findAll' in root ? [root, ...root.findAll()] : [root];
+  for (const n of nodes) {
+    if (n.type === 'TEXT') {
+      for (const seg of n.getStyledTextSegments(['fills']))
+        note(seg.fills, (id) => n.setRangeFillStyleIdAsync(seg.start, seg.end, id));
+    } else if ('fills' in n) note(n.fills, (id) => n.setFillStyleIdAsync(id));
+    if ('strokes' in n) note(n.strokes, (id) => n.setStrokeStyleIdAsync(id));
   }
-  return created;
+
+  // Reuse an earlier import's style only while it still holds the exact color, so a
+  // style the user has since recolored never changes this import.
+  const existing = new Map<string, string>();
+  for (const s of await figma.getLocalPaintStylesAsync()) {
+    const p = s.paints[0];
+    if (s.name.startsWith('HTML/') && s.paints.length === 1 && p.type === 'SOLID')
+      existing.set(colorKey(p.color, p.opacity === undefined ? 1 : p.opacity), s.id);
+  }
+  // Most-used first, capped so imports don't flood the file with near-duplicate styles.
+  const top = Array.from(uses.entries())
+    .sort((x, y) => y[1].links.length - x[1].links.length)
+    .slice(0, 40);
+  const pending: Promise<void>[] = [];
+  for (const [key, use] of top) {
+    let id = existing.get(key);
+    if (!id) {
+      const style = figma.createPaintStyle();
+      style.name = 'HTML/' + rgbToHex(use.color) + (use.opacity < 0.999 ? ` @${Math.round(use.opacity * 100)}%` : '');
+      style.paints = [{ type: 'SOLID', color: use.color, opacity: use.opacity }];
+      id = style.id;
+    }
+    for (const link of use.links) pending.push(link(id));
+  }
+  await Promise.all(pending);
+  return top.length;
 }
 
-function rgbToHex(c: Rgba): string {
+function colorKey(c: RGB, a: number): string {
+  return [Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255), Math.round(a * 100)].join(',');
+}
+
+function rgbToHex(c: RGB): string {
   const h = (n: number) =>
     Math.round(n * 255)
       .toString(16)

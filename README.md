@@ -60,7 +60,7 @@ npm install && npm run build
 | **Create as component** | The imported root becomes a Component instead of a Frame. |
 | **Execute page scripts** | For JS-rendered pages (Tailwind Play CDN, content built by a `<script>`). Entrance and scroll-reveal animations are settled before measuring. Off by default; only enable it for HTML you trust. |
 
-The import lands in the middle of your viewport, selected and zoomed to fit. It is named `HTML Import · 1440px` (or `HTML Component · …`), and up to 40 of its colors are added as local color styles under `HTML/`.
+The import lands in the middle of your viewport, selected and zoomed to fit. It is named `HTML Import · 1440px` (or `HTML Component · …`). Its 40 most-used colors become local color styles under `HTML/`, linked to every layer that uses them, so editing one style recolors the whole import.
 
 **Closer match:** import at the viewport you design at, and install the page's fonts in Figma. Fonts Figma doesn't have are substituted and listed after the import.
 

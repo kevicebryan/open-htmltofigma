@@ -17,7 +17,7 @@ Not in scope: URL crawling, site-wide import, or rewriting flex as Figma Auto La
 4. `::before` / `::after` are turned into real elements (all computed styles copied) while their parent is measured, so the browser lays them out.
 5. Inline content (text plus inline elements) becomes **one rich-text layer** per block, with a run per style. Line boxes come from `Range.getClientRects()`, and inline padding is carried as letter-spacing. The layer also records where the browser broke lines; if Figma's copy of the font would wrap differently, the main thread re-applies those breaks as soft line breaks.
 6. SVG is sent as markup with computed styles baked into attributes and `<use>` resolved, then imported with `figma.createNodeFromSvg`. Native form controls, CSS triangles and multi-colour borders are drawn as small SVGs too.
-7. The **main thread** (`code.ts`) resolves fonts once (`listAvailableFontsAsync`), creates images, and rebuilds Frames / Text / vectors with parent-relative positions.
+7. The **main thread** (`code.ts`) resolves fonts once (`listAvailableFontsAsync`), creates images, and rebuilds Frames / Text / vectors with parent-relative positions. Last, it links the most-used solid fills, strokes and text colors to `HTML/` paint styles, so editing a style recolors the import.
 
 Flex, grid, absolute CSS, etc. are handled by the browser. We only measure the result.
 
