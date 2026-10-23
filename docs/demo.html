@@ -8,55 +8,53 @@
 <head>
 <meta charset="utf-8">
 <title>Open HTML to Figma — demo</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600..900&display=swap">
 <style>
-  :root { --ink: #143326; --sub: #1e4032; --berry: #5e1f3d; --straw: #ff8fb3; --matcha: #74b087; --blue: #0d99ff; }
+  :root { --ink: #00352f; --sub: #3d5753; --racing: #00594f; --lime: #cedc00; --blue: #0d99ff; --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
   * { box-sizing: border-box; }
   html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
   body {
     position: relative;
-    font-family: Nunito, system-ui, sans-serif;
+    font-family: var(--font);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
     background:
-      radial-gradient(circle, rgba(255, 255, 255, 0.3) 2px, transparent 2.8px) 0 0 / 26px 26px,
-      radial-gradient(50% 60% at 88% 70%, rgba(255, 143, 179, 0.8), transparent 70%),
-      radial-gradient(60% 55% at 0 0, rgba(255, 255, 255, 0.55), transparent 70%),
-      linear-gradient(160deg, #8cc49b, var(--matcha) 55%, #5b9a71);
+      radial-gradient(50% 60% at 88% 75%, rgba(206, 220, 0, 0.28), transparent 70%),
+      radial-gradient(60% 55% at 0 0, #fff, transparent 70%),
+      linear-gradient(160deg, #f6f8f7, #dfe9e5);
   }
   body > * { position: absolute; opacity: 0; }
   img { display: block; }
 
   .stack { left: 0; top: 0; width: 1920px; height: 1080px; display: grid; place-content: center; justify-items: center; text-align: center; }
   .stack > * { will-change: transform, opacity; }
-  .logo { border-radius: 24%; box-shadow: 0 24px 50px -20px rgba(16, 60, 36, 0.6); }
+  .logo { border-radius: 24%; box-shadow: 0 24px 50px -20px rgba(0, 53, 47, 0.6); }
   h1 { margin: 0; font-weight: 900; letter-spacing: -0.035em; line-height: 1; }
   .lede { margin: 0; font-weight: 700; color: var(--sub); }
   .pill {
     padding: 14px 26px;
     border-radius: 999px;
-    font: 800 30px/1 Nunito;
+    font: 800 30px/1 var(--font);
     background: rgba(255, 255, 255, 0.6);
-    box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 12px 28px -14px rgba(16, 60, 36, 0.55);
+    box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 12px 28px -14px rgba(0, 53, 47, 0.55);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }
 
-  #brand { left: 110px; top: 96px; display: flex; align-items: center; gap: 16px; font: 900 32px/1 Nunito; letter-spacing: -0.02em; }
+  #brand { left: 110px; top: 96px; display: flex; align-items: center; gap: 16px; font: 900 32px/1 var(--font); letter-spacing: -0.02em; }
   #brand img { width: 56px; border-radius: 14px; }
 
   /* Browser window with the source page at 1440 × 1024, scaled 0.62. */
-  .window { left: 110px; top: 241px; width: 893px; height: 598px; border-radius: 16px; overflow: hidden; box-shadow: 0 40px 80px -40px rgba(10, 50, 30, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.1); }
+  .window { left: 110px; top: 241px; width: 893px; height: 598px; border-radius: 16px; overflow: hidden; box-shadow: 0 40px 80px -40px rgba(0, 40, 35, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.1); }
   #browser { background: #fff; }
-  .tabbar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: #eef2ef; font: 700 15px/1 Nunito; color: #52665b; }
+  .tabbar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: #eef2ef; font: 700 15px/1 var(--font); color: #52665b; }
   .tabbar b { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
   .tabbar b + b { background: #febc2e; } .tabbar b + b + b { background: #28c840; }
   .tabbar span { margin-left: 10px; padding: 6px 14px; border-radius: 8px; background: #fff; }
   .page { position: relative; height: 558px; overflow: hidden; }
   .page iframe { width: 1440px; height: 1024px; border: 0; transform: scale(0.62); transform-origin: 0 0; }
   #scan { position: absolute; inset: 0; pointer-events: none; }
-  #scan .line { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--straw) 20%, var(--straw) 80%, transparent); box-shadow: 0 0 18px 4px rgba(255, 143, 179, 0.7); }
-  #scan .box { position: absolute; border: 2px solid rgba(255, 110, 160, 0.9); background: rgba(255, 143, 179, 0.12); border-radius: 3px; opacity: 0; }
+  #scan .line { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--lime) 20%, var(--lime) 80%, transparent); box-shadow: 0 0 18px 4px rgba(206, 220, 0, 0.7); }
+  #scan .box { position: absolute; border: 2px solid rgba(0, 89, 79, 0.9); background: rgba(206, 220, 0, 0.16); border-radius: 3px; opacity: 0; }
 
   /* Figma window: layers panel + canvas. */
   #figma { background: #2c2c2c; color: #e6e6e6; font: 500 13px/1 system-ui, sans-serif; }
@@ -79,20 +77,20 @@
   #hl span { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); padding: 3px 6px; border-radius: 4px; background: var(--blue); color: #fff; font: 600 11px/1 system-ui, sans-serif; white-space: nowrap; }
 
   /* Plugin window: the real ui.html at 360 × 600, scaled 1.3. */
-  #plugin { left: 1342px; top: 124px; width: 468px; border-radius: 16px; overflow: hidden; background: #2c2c2c; box-shadow: 0 50px 90px -40px rgba(10, 50, 30, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.15); }
+  #plugin { left: 1342px; top: 124px; width: 468px; border-radius: 16px; overflow: hidden; background: #2c2c2c; box-shadow: 0 50px 90px -40px rgba(0, 40, 35, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.15); }
   #plugin .bar { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; color: #fff; font: 600 16px/1 system-ui, sans-serif; }
   #plugin .bar img { width: 21px; border-radius: 5px; }
   #plugin .bar i { margin-left: auto; font-style: normal; opacity: 0.6; }
   #plugin iframe { display: block; width: 360px; height: 600px; border: 0; transform: scale(1.3); transform-origin: 0 0; margin-bottom: 180px; }
 
-  #file { left: 150px; top: 880px; display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 12px; border-radius: 20px; font: 800 24px/1 Nunito; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 1px 0 #fff, 0 18px 36px -16px rgba(16, 60, 36, 0.6); transform-origin: 30px 30px; }
-  #file b { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: var(--berry); background: linear-gradient(#ffd3e1, #ffa6c4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85); }
+  #file { left: 150px; top: 880px; display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 12px; border-radius: 20px; font: 800 24px/1 var(--font); background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 1px 0 #fff, 0 18px 36px -16px rgba(0, 53, 47, 0.6); transform-origin: 30px 30px; }
+  #file b { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; color: #fff; background: var(--racing); }
   #cursor { left: 0; top: 0; width: 34px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35)); transform-origin: 4px 3px; z-index: 5; }
-  #ripple { left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; border: 4px solid var(--straw); z-index: 4; }
+  #ripple { left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; border: 4px solid var(--racing); z-index: 4; }
 
   .caption { left: 0; right: 0; top: 968px; display: flex; justify-content: center; }
   .caption .pill { display: flex; align-items: center; gap: 14px; }
-  .caption b { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--berry); background: linear-gradient(#ffc4d7, #ff93b6); font: 900 22px/1 Nunito; }
+  .caption b { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #fff; background: var(--racing); font: 700 22px/1 var(--font); }
 </style>
 </head>
 <body>
@@ -214,13 +212,13 @@
     [5700, function () {
       d.getElementById('file-zone').classList.add('has-file');
       d.getElementById('file-title').textContent = 'landing-page.html';
-      d.getElementById('file-desc').textContent = '12 KB loaded';
+      d.getElementById('file-desc').textContent = '12 KB';
       d.getElementById('html').value = html;
-      status('File loaded — ready to import');
+      status('File ready. Click Import to Figma.');
     }],
-    [7700, function () { loading('Rendering page…'); status('Rendering at 1440 × 1024…'); }],
-    [8600, function () { status('Loading page assets…'); }],
-    [9300, function () { status('Measuring layout…'); }],
+    [7700, function () { loading('Drawing the page…'); status('Drawing the page at 1440 × 1024…'); }],
+    [8600, function () { status('Loading images and fonts…'); }],
+    [9300, function () { status('Working out the layout…'); }],
     [10800, function () { loading('Creating Figma layers…'); status('Importing…'); }],
     [12000, function () {
       const b = d.getElementById('convert');
@@ -298,7 +296,7 @@
 
     // Plugin: drop-target glow and the button press, as inline styles so ui.html's own transitions run
     if (d) {
-      d.getElementById('file-zone').style.boxShadow = t >= 5250 && t < 5650 ? 'inset 0 0 0 2px #ff8fb3, 0 0 0 4px rgba(255, 143, 179, 0.5)' : '';
+      d.getElementById('file-zone').style.boxShadow = t >= 5250 && t < 5650 ? 'inset 0 0 0 2px #00594f, 0 0 0 4px rgba(0, 89, 79, 0.3)' : '';
       d.getElementById('convert').style.transform = t >= 7550 && t < 7700 ? 'scale(0.96)' : '';
     }
 

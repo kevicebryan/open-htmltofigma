@@ -1,20 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <title>Open HTML to Figma</title>
   <defs>
-    <path id="ear" d="M-60 96C-70 8-40-92-16-122Q0-140 16-122C40-92 70 8 60 96Z"/>
-    <clipPath id="tip"><path d="M-80-150H80V-26Q0-2-80-26Z"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e6eeeb"/></linearGradient>
+    <linearGradient id="blob-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0e8a78"/><stop offset="0.55" stop-color="#00594f"/><stop offset="1" stop-color="#00352f"/></linearGradient>
+    <radialGradient id="blob-glow" cx="0.5" cy="1.05" r="0.5"><stop offset="0" stop-color="#cedc00" stop-opacity="0.55"/><stop offset="1" stop-color="#cedc00" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="512" height="512" fill="#74B087"/>
-  <g transform="translate(168 150) rotate(-34)"><use href="#ear" fill="#fff"/><use href="#ear" fill="#FF8FB3" clip-path="url(#tip)"/></g>
-  <g transform="translate(388 146) rotate(27)"><use href="#ear" fill="#fff"/><use href="#ear" fill="#FF8FB3" clip-path="url(#tip)"/></g>
-  <ellipse cx="322" cy="392" rx="236" ry="214" fill="#fff"/>
-  <g fill="#5E1F3D">
-    <ellipse cx="240" cy="335" rx="21" ry="27"/>
-    <ellipse cx="362" cy="335" rx="21" ry="27"/>
-    <path d="M284 380h34a17 17 0 0 1-34 0z" stroke="#5E1F3D" stroke-width="6" stroke-linejoin="round"/>
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Top: an .html file. A curved arrow sweeps right and down to the Figma logo. -->
+  <path d="M162 48h64l34 34v94a12 12 0 0 1-12 12h-86a12 12 0 0 1-12-12V60a12 12 0 0 1 12-12z" fill="#fff" stroke="#00594f" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M226 48v22a12 12 0 0 0 12 12h22" fill="none" stroke="#00594f" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M188 94l-16 16 16 16M222 94l16 16-16 16M211 88l-12 44" fill="none" stroke="#00594f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="136" y="146" width="100" height="36" rx="10" fill="#00594f"/>
+  <text x="186" y="171" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="23" font-weight="700" fill="#fff">.html</text>
+  <path d="M284 84c46-26 92-10 104 52M396 118l-8 18-14-14" fill="none" stroke="#00594f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(350 166) scale(2.3)">
+    <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1abcfe"/>
+    <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0acf83"/>
+    <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#ff7262"/>
+    <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#f24e1e"/>
+    <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#a259ff"/>
   </g>
-  <g fill="#FF8FB3">
-    <circle cx="176" cy="408" r="40"/>
-    <circle cx="424" cy="408" r="40"/>
+
+  <!-- Bottom left: the blob mascot from ui.html, cut off by the corner, looking up at the file. -->
+  <g transform="translate(70 482) scale(3.6) translate(-50 -50)">
+    <circle cx="50" cy="50" r="46" fill="url(#blob-fill)"/>
+    <circle cx="50" cy="50" r="46" fill="url(#blob-glow)"/>
+    <ellipse cx="44" cy="12" rx="13" ry="5" transform="rotate(-12 44 12)" fill="#fff" fill-opacity="0.35"/>
+    <circle cx="50" cy="50" r="45.5" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="1.5"/>
+    <rect x="50" y="27" width="11" height="5" rx="2.5" fill="#fff"/>
+    <rect x="68" y="27" width="11" height="5" rx="2.5" fill="#fff"/>
+    <circle cx="66" cy="42" r="2.5" fill="#fff"/>
   </g>
 </svg>

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg" width="112" alt="Open HTML to Figma mascot" />
+  <img src="docs/logo.svg" width="112" alt="Open HTML to Figma icon: the blob mascot looking up at an .html file turning into the Figma logo" />
 </p>
 
 <h1 align="center">Open HTML to Figma</h1>
@@ -44,7 +44,7 @@ npm install && npm run build
 ```
 
 1. In Figma: **Plugins → Development → Import plugin from manifest…** and pick `manifest.json`
-2. Run **Open HTML to Figma**, pick a viewport, add your HTML, then **Import to Figma**
+2. Run **Open HTML to Figma**, pick a screen size, add your HTML, then **Import to Figma**
 
 ## Using it
 
@@ -61,11 +61,11 @@ npm install && npm run build
 | **Make it a component** | The imported root becomes a Component instead of a Frame. |
 | **Run page code** | For JS-rendered pages (Tailwind Play CDN, content built by a `<script>`). Entrance and scroll-reveal animations are settled before measuring. Off by default; only enable it for HTML you trust. |
 
-The plugin remembers your screen size and **Make it a component** between runs. **Run page code** always starts off.
+The plugin remembers your screen size and **Make it a component** between runs. **Run page code** always starts off. The panel follows Figma's light or dark theme, and each (i) explains the setting next to it.
 
 The import lands in the middle of your viewport, selected and zoomed to fit. It is named `HTML Import · 1440px` (or `HTML Component · …`). Its 40 most-used colors become local color styles under `HTML/`, linked to every layer that uses them, so editing one style recolors the whole import.
 
-**Closer match:** import at the viewport you design at, and install the page's fonts in Figma. Fonts Figma doesn't have are substituted and listed after the import.
+**Closer match:** import at the screen size you design at, and install the page's fonts in Figma. Fonts Figma doesn't have are substituted and listed after the import.
 
 ## What you get
 
@@ -97,7 +97,7 @@ Positions are absolute, straight from the browser's layout, instead of being rew
 
 - Everything runs inside Figma: there is no backend, account, analytics or tracking, and the plugin stores nothing.
 - The only network requests are the ones your page makes while it renders (its stylesheets, scripts, fonts and images). Nothing from your Figma file is sent anywhere.
-- The plugin UI itself makes no requests; its typeface is bundled.
+- The plugin UI itself makes no requests; it uses your system font.
 - `manifest.json` allows every domain only because pages can reference any CDN.
 
 ## Limits
@@ -117,7 +117,7 @@ Missing fonts are substituted, and Figma's copy of a web font can be slightly wi
 ```bash
 npm run watch                      # rebuild code.js on change
 python3 -m http.server 8765        # then open http://localhost:8765/test/check.html
-node docs/record.mjs               # re-record docs/demo.mp4 (needs Chrome + ffmpeg, server running)
+node docs/record.mjs               # re-record docs/demo.mp4 and demo.webp (needs Chrome, ffmpeg, img2webp; server running)
 ```
 
 After changing the capture, run `test/check.html`, then import the files in `examples/` in Figma desktop.

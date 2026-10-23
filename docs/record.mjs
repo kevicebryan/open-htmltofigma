@@ -1,8 +1,9 @@
-// Records docs/demo.html frame by frame into docs/demo.mp4 (1920×1080, 30 fps).
-// Needs Node 22+, Chrome and ffmpeg. Serve the repo root first: python3 -m http.server 8765
+// Records docs/demo.html frame by frame into docs/demo.mp4 (1920×1080, 30 fps) and the README's
+// docs/demo.webp (880 wide, 8 fps). Needs Node 22+, Chrome, ffmpeg and img2webp (libwebp).
+// Serve the repo root first: python3 -m http.server 8765
 // Usage: node docs/record.mjs [frames]   (frames limits the run, for quick previews)
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -63,6 +64,15 @@ try {
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
     new URL('demo.mp4', import.meta.url).pathname]);
   console.log('wrote docs/demo.mp4');
+
+  const still = join(dir, 'webp');
+  mkdirSync(still);
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', new URL('demo.mp4', import.meta.url).pathname,
+    '-vf', 'fps=8,scale=880:-2:flags=lanczos', join(still, '%04d.png')]);
+  const pngs = readdirSync(still).sort().map((f) => join(still, f));
+  execFileSync('img2webp', ['-loop', '0', '-lossy', '-q', '72', '-d', '125', '-o',
+    new URL('demo.webp', import.meta.url).pathname, ...pngs]);
+  console.log('wrote docs/demo.webp');
 } finally {
   await new Promise((r) => { chrome.once('exit', r); chrome.kill(); });
   rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
