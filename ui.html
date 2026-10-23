@@ -204,6 +204,18 @@
 
     .segment button:hover, .segment button.active { color: var(--ink); }
 
+    .segment svg {
+      width: 14px;
+      height: 14px;
+      margin: -2px 4px 0 0;
+      vertical-align: middle;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
     /* Options: an inset group of rows with jelly switches. */
     .group {
       margin-bottom: 10px;
@@ -604,13 +616,13 @@
         </span>
       </span>
       <div class="segment" id="viewports">
-        <button type="button" data-size="desktop" data-w="1440" data-h="1024" class="active" aria-pressed="true">Desktop</button>
-        <button type="button" data-size="laptop" data-w="1280" data-h="832" aria-pressed="false">Laptop</button>
-        <button type="button" data-size="tablet" data-w="768" data-h="1024" aria-pressed="false">Tablet</button>
-        <button type="button" data-size="mobile" data-w="390" data-h="844" aria-pressed="false">Mobile</button>
-        <button type="button" data-size="slide" data-w="1920" data-h="1080" aria-pressed="false">Slide</button>
-        <button type="button" data-size="a4" data-w="794" data-h="1123" aria-pressed="false">A4</button>
-        <button type="button" data-size="letter" data-w="816" data-h="1056" aria-pressed="false">Letter</button>
+        <button type="button" data-size="desktop" data-w="1440" data-h="1024" class="active" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5"/><path d="M8 11v3M5.5 14h5"/></svg>Desktop</button>
+        <button type="button" data-size="laptop" data-w="1280" data-h="832" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="7.5" rx="1"/><path d="M1.5 13h13"/></svg>Laptop</button>
+        <button type="button" data-size="tablet" data-w="768" data-h="1024" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="1.5" width="11" height="13" rx="2"/><path d="M7.25 12h1.5"/></svg>Tablet</button>
+        <button type="button" data-size="mobile" data-w="390" data-h="844" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.5" y="1.5" width="7" height="13" rx="2"/><path d="M7.25 12h1.5"/></svg>Mobile</button>
+        <button type="button" data-size="slide" data-w="1920" data-h="1080" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13M2.5 2.5v7.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V2.5M8 11v1.5M5.5 14.5 8 12.5l2.5 2"/></svg>Slide</button>
+        <button type="button" data-size="a4" data-w="794" data-h="1123" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5l3 3v10h-8.5z M9.5 1.5v3h3"/></svg>A4</button>
+        <button type="button" data-size="letter" data-w="816" data-h="1056" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5l3 3v10h-8.5z M9.5 1.5v3h3"/></svg>Letter</button>
         <button type="button" data-size="custom" aria-pressed="false">Custom</button>
       </div>
     </div>
