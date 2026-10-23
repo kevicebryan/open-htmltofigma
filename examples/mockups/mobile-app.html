@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse — Today</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0f1115; --card: #181b22; --line: #262a33; --text: #f4f5f7; --muted: #8b90a0; --lime: #c6f432; --violet: #8b7cff; --coral: #ff7a6b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; width: 390px; height: 844px; overflow: hidden; position: relative; }
+  .status { height: 47px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 15px; }
+  .status .icons { display: flex; gap: 6px; align-items: center; }
+  header { padding: 12px 20px 0; display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--violet), var(--coral)); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+  header .hi { flex: 1; }
+  header .hi small { color: var(--muted); font-size: 13px; display: block; }
+  header .hi strong { font-size: 18px; font-weight: 700; }
+  .bell { width: 44px; height: 44px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); display: grid; place-items: center; position: relative; }
+  .bell::after { content: ''; position: absolute; top: 11px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--coral); border: 2px solid var(--card); }
+  .ring-card { margin: 20px 20px 0; padding: 20px; border-radius: 28px; background: var(--lime); color: #11140a; display: flex; gap: 18px; align-items: center; }
+  .ring-card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7; }
+  .ring-card .big { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin-top: 4px; }
+  .ring-card .big span { font-size: 16px; font-weight: 600; letter-spacing: 0; }
+  .ring-card p { font-size: 13px; margin-top: 6px; font-weight: 500; }
+  .pill { display: inline-block; margin-top: 12px; background: #11140a; color: var(--lime); font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
+  .stats { margin: 14px 20px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 16px; }
+  .stat .label { color: var(--muted); font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .stat .val { font-size: 24px; font-weight: 700; margin-top: 8px; letter-spacing: -0.02em; }
+  .stat .val small { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 36px; margin-top: 10px; }
+  .bars i { flex: 1; background: var(--violet); border-radius: 4px; opacity: 0.35; }
+  .bars i.on { opacity: 1; }
+  .section { margin: 22px 20px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  .section h3 { font-size: 17px; font-weight: 700; }
+  .section a { color: var(--lime); font-size: 13px; font-weight: 600; text-decoration: none; }
+  .list { margin: 0 20px; display: flex; flex-direction: column; gap: 10px; }
+  .item { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; }
+  .item .ic { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; }
+  .item .txt { flex: 1; }
+  .item .txt b { font-size: 15px; font-weight: 600; display: block; }
+  .item .txt span { font-size: 12px; color: var(--muted); }
+  .item .kcal { font-size: 14px; font-weight: 700; }
+  nav { position: absolute; left: 20px; right: 20px; bottom: 28px; height: 68px; border-radius: 34px; background: rgba(30, 33, 41, 0.92); border: 1px solid var(--line); display: flex; justify-content: space-around; align-items: center; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+  nav .tab { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; }
+  nav .tab.active { background: var(--lime); }
+  .home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: #fff; }
+</style>
+</head>
+<body>
+  <div class="status">
+    <span>9:41</span>
+    <span class="icons">
+      <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#fff"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#fff"/><rect x="10" y="2.5" width="3" height="9.5" rx="1" fill="#fff"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#fff"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.5c2.3 0 4.4.9 6 2.4l1.2-1.3A10.4 10.4 0 0 0 8 .7 10.4 10.4 0 0 0 .8 3.6L2 4.9a8.6 8.6 0 0 1 6-2.4Zm0 3.6c1.3 0 2.5.5 3.4 1.3l1.2-1.3A6.8 6.8 0 0 0 8 4.3a6.8 6.8 0 0 0-4.6 1.8l1.2 1.3A5 5 0 0 1 8 6.1Zm0 3.5L10 7.8a3 3 0 0 0-4 0L8 9.6Z" fill="#fff"/></svg>
+      <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="19" height="9" rx="2" fill="#fff"/><path d="M24 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2Z" fill="#fff" fill-opacity="0.4"/></svg>
+    </span>
+  </div>
+
+  <header>
+    <div class="avatar">MR</div>
+    <div class="hi"><small>Good morning</small><strong>Maya Rivera</strong></div>
+    <div class="bell"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f4f5f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+  </header>
+
+  <section class="ring-card">
+    <svg width="104" height="104" viewBox="0 0 104 104">
+      <circle cx="52" cy="52" r="44" stroke="rgba(17,20,10,0.15)" stroke-width="12" fill="none"/>
+      <circle cx="52" cy="52" r="44" stroke="#11140a" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="69" transform="rotate(-90 52 52)"/>
+      <text x="52" y="58" text-anchor="middle" font-family="Plus Jakarta Sans" font-weight="800" font-size="20" fill="#11140a">75%</text>
+    </svg>
+    <div>
+      <h2>Daily goal</h2>
+      <div class="big">8,412 <span>steps</span></div>
+      <p>2,588 more to hit 11k today</p>
+      <span class="pill">+12% vs yesterday</span>
+    </div>
+  </section>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label"><i class="dot" style="background: var(--coral)"></i>Heart rate</div>
+      <div class="val">72 <small>bpm</small></div>
+      <svg width="100%" height="36" viewBox="0 0 140 36" preserveAspectRatio="none" style="margin-top: 10px; display: block"><path d="M0 22 L20 22 L28 8 L36 30 L44 18 L60 18 L68 4 L76 28 L84 20 L140 20" stroke="#ff7a6b" stroke-width="2.5" fill="none" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="stat">
+      <div class="label"><i class="dot" style="background: var(--violet)"></i>Sleep</div>
+      <div class="val">7h 20m</div>
+      <div class="bars"><i style="height: 40%"></i><i style="height: 65%"></i><i style="height: 50%"></i><i class="on" style="height: 90%"></i><i style="height: 70%"></i><i style="height: 55%"></i><i class="on" style="height: 100%"></i></div>
+    </div>
+  </div>
+
+  <div class="section"><h3>Today's activity</h3><a href="#">See all</a></div>
+  <div class="list">
+    <div class="item">
+      <div class="ic" style="background: rgba(198, 244, 50, 0.14)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c6f432" stroke-width="2" stroke-linecap="round"><circle cx="13" cy="4" r="2"/><path d="m7 21 3-6 3 3v-6l3 2 2-3M9 9l3-2 3 2"/></svg></div>
+      <div class="txt"><b>Morning run</b><span>5.2 km · 28 min</span></div>
+      <div class="kcal">412 kcal</div>
+    </div>
+    <div class="item">
+      <div class="ic" style="background: rgba(139, 124, 255, 0.16)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b7cff" stroke-width="2" stroke-linecap="round"><path d="M6.5 6.5h11M6.5 17.5h11M4 9v6M20 9v6M2 11v2M22 11v2"/></svg></div>
+      <div class="txt"><b>Strength training</b><span>Upper body · 45 min</span></div>
+      <div class="kcal">286 kcal</div>
+    </div>
+  </div>
+
+  <nav>
+    <div class="tab active"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#11140a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b90a0" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/></svg></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b90a0" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b90a0" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></div>
+  </nav>
+  <div class="home"></div>
+</body>
+</html>

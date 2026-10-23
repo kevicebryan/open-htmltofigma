@@ -30,9 +30,19 @@
       const fade = ui.gradientStops(['transparent', 'rgb(255, 0, 0)'], 100);
       check('transparent stop keeps the neighbour hue', fade[0].color.r === 1 && fade[0].color.a === 0);
       const clipped = ui.gradientStops(['rgb(0, 0, 0)', 'rgb(255, 255, 255) 200%'], 100);
+      const fadeIn = ui.gradientStops(['rgba(0, 0, 255, 0.2)', 'rgb(255, 255, 255)'], 100).find(s => s.position === 0.5);
+      check('partly transparent stops blend premultiplied, like CSS', fadeIn && Math.abs(fadeIn.color.r - 5 / 6) < 0.01 && Math.abs(fadeIn.color.a - 0.6) < 0.01);
       check('stops past 100% are cut at the interpolated colour', Math.abs(clipped[1].color.r - 0.5) < 0.01);
       check('text-align start/end follow direction', ui.mapAlign('start', 'rtl') === 'RIGHT' && ui.mapAlign('end', 'rtl') === 'LEFT' &&
         ui.mapAlign('start', 'ltr') === 'LEFT' && ui.mapAlign('end', 'ltr') === 'RIGHT');
+      const ns = 'http://www.w3.org/2000/svg';
+      const probe = ui.document.body.appendChild(ui.document.createElementNS(ns, 'svg'));
+      probe.innerHTML = '<circle cx="52" cy="52" r="44" stroke="black" fill="none" stroke-dasharray="276.5" stroke-dashoffset="69"/>';
+      const ring = ui.document.createElementNS(ns, 'path');
+      ring.setAttribute('d', ui.dashedPath(probe.firstChild, ui.getComputedStyle(probe.firstChild)));
+      probe.appendChild(ring);
+      check('SVG dashes traced into a path (75% ring)', Math.abs(ring.getTotalLength() - 207.5) < 2);
+      probe.remove();
       check('whitespace collapses like CSS', ui.collapseWs('  a \n\t b  ', 'collapse').text === ' a b ');
       check('a chat code fence is stripped from pasted HTML', ui.readPasted('```html\n<p>Hi</p>\n```').html === '<p>Hi</p>');
       check('pasted React is recognised, a page that loads React is not',
@@ -74,6 +84,23 @@
       check('backdrop-filter → background blur', named('div.pane').effects.some(e => e.type === 'BACKGROUND_BLUR'));
       check('filter: blur → layer blur', named('div.blob').effects.some(e => e.type === 'LAYER_BLUR' && e.radius === 48));
       check('page script ran', texts.some(t => textOf(t) === 'JavaScript'));
+
+      // Claude Design artboards (.dc.html)
+      const dcProps = '<script type="text/x-dc" data-dc-script data-props=\'{"$preview":{"width":1080,"height":1350}}\'><\/script>';
+      const dc = ui.claudeDesign('<x-dc><div>Static</div></x-dc>' + dcProps);
+      check('Claude Design artboard size read from $preview', dc && dc.w === 1080 && dc.h === 1350 && !dc.templated);
+      check('Claude Design templates need the runtime', ui.claudeDesign('<x-dc><sc-for list="{{items}}" as="i">{{i.label}}</sc-for></x-dc>').templated &&
+        ui.claudeDesign('<p>{{not a design}}</p>') === null);
+
+      // A family whose only loaded face is 800 (its 400 face is declared but never used) is still the page's font.
+      const nunito = Array.from(ui.document.styleSheets).flatMap(s => Array.from(s.cssRules))
+        .find(r => r instanceof ui.CSSFontFaceRule && /Nunito/.test(r.style.getPropertyValue('font-family'))).style.getPropertyValue('src');
+      const heavy = await ui.captureHtmlTree('<style>@font-face{font-family:Probe;font-weight:400;src:url(missing-probe.woff2)}' +
+        '@font-face{font-family:Probe;font-weight:800;src:' + nunito + '}</style><p style="font:800 40px Probe, serif">Heavy</p>',
+        { width: 400, height: 200, runScripts: false });
+      const heavyText = [];
+      (function walk(n) { if (n.type === 'text') heavyText.push(n); (n.children || []).forEach(walk); })(heavy);
+      check('font loaded only at 800 keeps its family', heavyText[0] && heavyText[0].runs[0].families[0] === 'Probe');
     } catch (e) {
       results.push('✗ threw: ' + (e && e.stack || e));
     }

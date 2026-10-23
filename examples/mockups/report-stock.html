@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Weekly Stock Highlight — HLXS</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #16181d; --muted: #6b7079; --line: #e6e3dc; --paper: #fbfaf7; --up: #0f8a5f; --down: #c2412d; --accent: #1d4ed8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font: 400 15px/1.6 Inter, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 32px 64px; }
+  .kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: Fraunces, serif; font-weight: 700; font-size: 44px; line-height: 1.1; letter-spacing: -0.01em; margin: 10px 0 12px; }
+  .dek { font-size: 18px; color: var(--muted); max-width: 640px; }
+  .meta { display: flex; gap: 18px; margin-top: 18px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 0; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .quote { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; margin: 32px 0; }
+  .price { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .ticker { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .ticker .sym { background: var(--ink); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.04em; }
+  .ticker span:last-child { color: var(--muted); font-weight: 400; font-size: 14px; }
+  .big { font-family: Fraunces, serif; font-size: 48px; font-weight: 500; margin-top: 10px; line-height: 1.1; }
+  .chg { color: var(--up); font-weight: 600; font-size: 15px; }
+  .spark { margin-top: 14px; display: block; }
+  .stats { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px 22px; }
+  .stats div { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .stats div:last-child { border-bottom: 0; }
+  .stats dt { color: var(--muted); }
+  .stats dd { font-weight: 600; font-variant-numeric: tabular-nums; }
+  h2 { font-family: Fraunces, serif; font-size: 26px; font-weight: 700; margin: 36px 0 12px; }
+  p { margin-bottom: 14px; }
+  .callout { border-left: 4px solid var(--accent); background: #eef3ff; padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 22px 0; font-size: 15px; }
+  .callout b { display: block; margin-bottom: 4px; color: var(--accent); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .bars { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 8px; }
+  .bar { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 14px; font-size: 14px; }
+  .bar .t { height: 14px; background: #efece5; border-radius: 7px; overflow: hidden; }
+  .bar .t i { display: block; height: 100%; background: linear-gradient(90deg, #1d4ed8, #60a5fa); border-radius: 7px; }
+  .bar .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  ul { padding-left: 20px; margin: 10px 0 16px; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--accent); }
+  .risk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 10px; }
+  .risk div { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 13px; color: var(--muted); }
+  .risk strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
+  .lvl { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-bottom: 8px; }
+  .hi { background: #fde8e4; color: var(--down); }
+  .md { background: #fff3d6; color: #9a6400; }
+  .lo { background: #e2f4ec; color: var(--up); }
+  footer { margin-top: 40px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="kicker">Weekly stock highlight · Semiconductors</div>
+    <h1>Helix keeps pulling ahead as data-center demand refuses to cool</h1>
+    <p class="dek">Record data-center revenue and a raised outlook sent shares to an all-time high. Here is what moved the stock and what could slow it down.</p>
+    <div class="meta"><span>Week of <b>Sep 22–26, 2026</b></span><span>Close <b>Sep 26</b></span><span>Illustrative data, not investment advice</span></div>
+
+    <div class="quote">
+      <div class="price">
+        <div class="ticker"><span class="sym">HLXS</span><span>Helix Semiconductor · NASDAQ</span></div>
+        <div class="big">$1,284.60</div>
+        <div class="chg">▲ $86.15 (+7.19%) this week</div>
+        <svg class="spark" width="100%" height="70" viewBox="0 0 400 70" preserveAspectRatio="none">
+          <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0f8a5f" stop-opacity="0.25"/><stop offset="1" stop-color="#0f8a5f" stop-opacity="0"/></linearGradient></defs>
+          <path d="M0 55 L40 50 L80 52 L120 44 L160 46 L200 36 L240 38 L280 26 L320 28 L360 16 L400 10 V70 H0Z" fill="url(#g)"/>
+          <path d="M0 55 L40 50 L80 52 L120 44 L160 46 L200 36 L240 38 L280 26 L320 28 L360 16 L400 10" fill="none" stroke="#0f8a5f" stroke-width="2.5" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <dl class="stats">
+        <div><dt>Market cap</dt><dd>$3.16T</dd></div>
+        <div><dt>P/E (fwd)</dt><dd>38.4×</dd></div>
+        <div><dt>52-week range</dt><dd>$742 – $1,291</dd></div>
+        <div><dt>Avg. volume</dt><dd>41.2M</dd></div>
+        <div><dt>Dividend yield</dt><dd>0.03%</dd></div>
+      </dl>
+    </div>
+
+    <h2>What moved the stock</h2>
+    <p>Quarterly results beat on every line. Data-center revenue grew <strong>112% year over year</strong>, while gaming stayed flat. Management raised next-quarter guidance by roughly $2B, citing new cloud contracts and early demand for its next accelerator generation.</p>
+    <div class="callout"><b>Key takeaway</b>Supply, not demand, is still the constraint. Gross margin held at 75% despite heavier packaging costs.</div>
+
+    <h2>Revenue by segment</h2>
+    <div class="bars">
+      <div class="bar"><span>Data center</span><div class="t"><i style="width: 88%"></i></div><span class="v">$41.3B</span></div>
+      <div class="bar"><span>Gaming</span><div class="t"><i style="width: 9%"></i></div><span class="v">$3.9B</span></div>
+      <div class="bar"><span>Professional viz</span><div class="t"><i style="width: 3%"></i></div><span class="v">$1.1B</span></div>
+      <div class="bar"><span>Automotive</span><div class="t"><i style="width: 2%"></i></div><span class="v">$0.8B</span></div>
+    </div>
+
+    <h2>Watch next week</h2>
+    <ul>
+      <li>Hyperscaler capex updates from two major cloud providers.</li>
+      <li>Export-license headlines affecting shipments to restricted markets.</li>
+      <li>Options expiry: open interest clusters around the $1,300 strike.</li>
+    </ul>
+
+    <h2>Risks</h2>
+    <div class="risk">
+      <div><span class="lvl hi">High</span><strong>Customer concentration</strong>Four buyers make up nearly half of revenue.</div>
+      <div><span class="lvl md">Medium</span><strong>Valuation</strong>Priced for continued triple-digit growth.</div>
+      <div><span class="lvl lo">Low</span><strong>Balance sheet</strong>Net cash position above $40B.</div>
+    </div>
+
+    <footer>Prepared for internal discussion. Figures are illustrative and rounded; not a recommendation to buy or sell any security.</footer>
+  </div>
+</body>
+</html>

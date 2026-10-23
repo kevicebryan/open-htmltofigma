@@ -105,7 +105,8 @@ figma.ui.onmessage = async (msg: {
     const styles = await linkColorStyles(root);
     figma.currentPage.selection = [root];
     figma.viewport.scrollAndZoomIntoView([root]);
-    figma.ui.postMessage({ type: 'done', count: countNodes(root), styles, missingFonts: fonts.missing });
+    const missingImages = imageUrls(msg.tree).filter((url) => !images.has(url)).length;
+    figma.ui.postMessage({ type: 'done', count: countNodes(root), styles, missingFonts: fonts.missing, missingImages });
   } catch (err) {
     figma.ui.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
   }
@@ -302,6 +303,16 @@ function walk(n: HtmlNode, fn: (n: HtmlNode) => void): void {
   for (const c of n.children || []) walk(c, fn);
 }
 
+/** Image URLs the UI left for Figma to fetch. */
+function imageUrls(tree: HtmlNode): string[] {
+  const urls = new Set<string>();
+  walk(tree, (n) => {
+    const all = (n.fills || []).concat(...(n.runs || []).map((r) => r.fills || []));
+    for (const p of all) if (p.type === 'IMAGE' && p.url) urls.add(p.url);
+  });
+  return Array.from(urls);
+}
+
 async function loadImages(tree: HtmlNode, b64: Record<string, string>): Promise<Map<string, string>> {
   const hashes = new Map<string, string>();
   for (const id of Object.keys(b64)) {
@@ -312,13 +323,8 @@ async function loadImages(tree: HtmlNode, b64: Record<string, string>): Promise<
     }
   }
   // Images the UI couldn't read (no CORS): let Figma fetch them itself.
-  const urls = new Set<string>();
-  walk(tree, (n) => {
-    const all = (n.fills || []).concat(...(n.runs || []).map((r) => r.fills || []));
-    for (const p of all) if (p.type === 'IMAGE' && p.url) urls.add(p.url);
-  });
   await Promise.all(
-    Array.from(urls).map((url) =>
+    imageUrls(tree).map((url) =>
       figma
         .createImageAsync(url)
         .then((img) => hashes.set(url, img.hash))

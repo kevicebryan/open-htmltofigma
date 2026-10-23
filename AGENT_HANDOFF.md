@@ -33,6 +33,8 @@ The current output intentionally uses absolute positioning. Do not add Auto Layo
 | `manifest.json` | Figma plugin entry points and network permissions |
 | `examples/` | Sample documents used for manual visual regression testing (`kitchen-sink.html` covers most features; `tailwind-cdn.html` needs page scripts) |
 | `test/check.html` | Runs the real capture on `examples/kitchen-sink.html` and asserts the tree (serve the repo root, open `/test/check.html`) |
+| `test/figma-e2e.mjs` | Real-Figma fidelity run: captures a page in headless Chrome and writes `use_figma` chunks plus a browser reference into `test/out/` (see `.claude/skills/figma-fidelity-test`). It also redraws the tree with `test/preview.js` and prints the share of pixels that differ from the browser (`preview.png`, `diff.png`), which catches capture bugs without Figma calls |
+| `examples/mockups/` | Hi-fi fixtures for fidelity runs (mobile, desktop, report, invoice, deck); new ones via `.claude/skills/make-mockup` |
 | `docs/` | Logo (`logo.svg`), Community icon (`icon.png`) and promo media. `promo.html` renders the image boards, `demo.html` + `record.mjs` record `demo.mp4`; both embed the live `ui.html` |
 
 ## UI styling
@@ -45,7 +47,7 @@ kevbry.in/open-html-to-figma embeds a verbatim copy of `ui.html` as a playground
 
 ## Non-negotiable UX behavior
 
-- Never remember **Execute page scripts** between runs: running a page's scripts must stay a fresh choice for each page.
+- Never remember **Run page code** between runs: running a page's scripts must stay a fresh choice for each page.
 - If there is no pasted HTML when the user clicks import, show a clear error and open the file picker.
 - Reject non-HTML files even when a user bypasses the file-input filter.
 - During conversion, disable the import button, show an animated spinner, and communicate the current phase.
@@ -66,11 +68,20 @@ Prioritize in this order:
 
 - Figma's copy of a web font can differ from the served one (variable optical sizes, versions). Lines keep the browser's breaks, but widths can still drift by a few percent. The plugin API has no variable-axis control.
 - Skew, non-uniform scale and 3D transforms keep the measured bounding box instead of being re-applied.
+- Figma's SVG import drops `stroke-dasharray`, so capture traces dashes into plain paths (`dashedPath` in `ui.html`); zero-length round-cap dots are dropped.
 - `clip-path`, masks and CSS filters other than blur / drop-shadow are not reproduced (images get their filter baked in).
-- Conic / repeating / tiled gradients and HTML inside `<foreignObject>` become image fills.
+- Conic / repeating / tiled gradients and HTML inside `<foreignObject>` become image fills. Raster fills are capped at 4096 px, so a tiled pattern across a tall page loses detail (fine dot grids look soft).
 - Images from servers without CORS are fetched by Figma itself and lose exact `object-position` cropping.
 - CSS `counter()` values are estimated from sibling position; `@import` inside picked local stylesheets is not followed.
 - Cross-origin iframes, `<audio>` and closed shadow roots render as placeholders or not at all.
+
+## Claude Design artboards
+
+Claude Design saves each artboard as a `.dc.html` file: an `<x-dc>` template plus a script that its runtime (`./support.js`, served only inside Claude Design) renders.
+
+- An artboard without templates imports as is, at the frame size in its `data-props` `$preview`.
+- An artboard with `{{…}}`, `<sc-for>`, `<sc-if>` or `<dc-import>` is refused with a message: without the runtime it would import raw template text.
+- Uploaded images are `/_blob/<id>` URLs that only load inside Claude Design. The done status counts images that could not be loaded.
 
 ## Implementation principles
 

@@ -709,11 +709,15 @@
     const folderInput = document.getElementById('folder');
     let assetFiles = []; // local CSS / JS / images / fonts picked with the page
     let sourceName = ''; // picked file's name, used to name the Figma frame
-    htmlInput.addEventListener('input', function () { sourceName = ''; }); // pasted HTML isn't the file any more
+    htmlInput.addEventListener('input', function () {
+      sourceName = ''; // pasted HTML isn't the file any more
+      useDesignSize(htmlInput.value);
+    });
 
     let isImporting = false;
     let importTimeout = null;
     let scriptsSkipped = false;
+    let blobImages = false; // Claude Design asset-store URLs (/_blob/<id>), which never load outside it
 
     const clampSize = function (v, fallback) { return Math.min(4000, Math.max(100, parseInt(v, 10) || fallback)); };
 
@@ -781,6 +785,32 @@
       const fenced = /^```[\w-]*\n([\s\S]*?)\n?```$/.exec(src);
       if (fenced) src = fenced[1].trim();
       return { html: src, react: src.charAt(0) !== '<' && /\b(import|export)\s|className=|useState\(/.test(src) };
+    }
+
+    /** A Claude Design artboard (.dc.html): its frame size from the `$preview` prop, and whether
+     *  it needs Claude Design's runtime to fill in {{…}} / <sc-for> templates. Null for other pages. */
+    function claudeDesign(html) {
+      if (!/<x-dc[\s>]/i.test(html)) return null;
+      const m = /"\$preview"\s*:\s*(\{[^{}]*\})/.exec(html);
+      let size = {};
+      try { if (m) size = JSON.parse(m[1]); } catch (e) { /* malformed props: keep the chosen size */ }
+      return { w: size.width, h: size.height, templated: /\{\{[\s\S]*?\}\}|<sc-(for|if)\b|<dc-import\b/i.test(html) };
+    }
+
+    const DESIGN_TEMPLATED = 'This Claude Design artboard fills in its content with templates ({{…}}) that only run ' +
+      'inside Claude Design. Ask Claude there for this artboard as one static HTML file with every value filled in, then import that.';
+
+    /** A Claude Design artboard imports at its own frame size. Returns the artboard, or null. */
+    function useDesignSize(html) {
+      const dc = claudeDesign(html);
+      if (!dc || !(dc.w > 0 && dc.h > 0)) return dc;
+      const preset = Array.prototype.find.call(viewportBtns, function (b) {
+        return +b.getAttribute('data-w') === dc.w && +b.getAttribute('data-h') === dc.h;
+      });
+      selectSize(preset ? preset.getAttribute('data-size') : 'custom');
+      sizeW.value = clampSize(dc.w, 1440);
+      sizeH.value = clampSize(dc.h, 1024);
+      return dc;
     }
 
     /** A request to add to an AI chat, so what comes back imports cleanly at the chosen size. */
@@ -888,7 +918,10 @@
         fileTitle.textContent = page.name;
         fileDesc.textContent = Math.max(1, Math.round(page.size / 1024)) + ' KB' +
           (assetFiles.length ? ' · plus ' + assetFiles.length + ' image, font or style file' + (assetFiles.length > 1 ? 's' : '') : '');
-        setStatus('File ready. Click Import to Figma.');
+        const dc = useDesignSize(htmlInput.value);
+        if (dc && dc.templated) setStatus(DESIGN_TEMPLATED, 'error');
+        else if (dc) setStatus('Claude Design artboard ready at ' + sizeW.value + ' × ' + sizeH.value + '. Click Import to Figma.');
+        else setStatus('File ready. Click Import to Figma.');
       } catch (err) {
         resetFilePicker();
         setStatus("Couldn't open this file: " + err.message, 'error');
@@ -982,6 +1015,7 @@
     let fontCheck = new Map();  // family -> did the browser have it?
     let fontProbe = null;
     let bodyBgOnCanvas = false; // body background is painted by the root frame
+    let missingImages = 0;      // images the browser could not load (Figma can't either)
 
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
@@ -1262,6 +1296,19 @@
         if (p) out.push({ pos: s.pos, color: Object.assign({}, p, { a: 0 }) });
         if (n && (!p || !sameRgb(p, n))) out.push({ pos: s.pos, color: Object.assign({}, n, { a: 0 }) });
       });
+      // Between two partly transparent stops Figma would interpolate the plain colour, so the
+      // more transparent one tints the middle too much. Sample the premultiplied blend instead.
+      for (let i = out.length - 1; i > 0; i--) {
+        const a = out[i - 1], b = out[i];
+        if (Math.abs(a.color.a - b.color.a) < 0.02 || sameRgb(a.color, b.color) || b.pos <= a.pos) continue;
+        const mid = [];
+        for (let k = 1; k < 8; k++) {
+          const t = k / 8, alpha = a.color.a + (b.color.a - a.color.a) * t;
+          const mix = function (ch) { return (a.color[ch] * a.color.a * (1 - t) + b.color[ch] * b.color.a * t) / alpha; };
+          mid.push({ pos: a.pos + (b.pos - a.pos) * t, color: { r: mix('r'), g: mix('g'), b: mix('b'), a: alpha } });
+        }
+        out.splice.apply(out, [i, 0].concat(mid));
+      }
       // Figma stops live in [0,1]: cut stops outside it at the interpolated colour.
       const at = function (t) {
         if (t <= out[0].pos) return out[0].color;
@@ -1402,7 +1449,10 @@
       const remote = /^https?:/i.test(url);
       const fallback = remote ? { type: 'IMAGE', scaleMode: opt.size === 'contain' ? 'FIT' : 'FILL', url: url } : null;
       const img = await loadImage(url);
-      if (!img) return fallback; // no CORS: Figma fetches it itself (approximate crop)
+      if (!img) {
+        if (!fallback) missingImages++;
+        return fallback; // no CORS: Figma fetches it itself (approximate crop)
+      }
       // Positioning area = padding box.
       const bl = px(cs.borderLeftWidth), bt = px(cs.borderTopWidth);
       const ow = box.w - bl - px(cs.borderRightWidth), oh = box.h - bt - px(cs.borderBottomWidth);
@@ -1657,6 +1707,16 @@
 
     function browserHasFont(family) {
       if (fontCheck.has(family)) return fontCheck.get(family);
+      // A loaded web-font face counts, whatever its weight: the probe below draws at 400, which a
+      // page that only loads its 800 face (Claude Design headings) never has.
+      let loaded = false;
+      if (doc.fonts) doc.fonts.forEach(function (f) {
+        if (f.status === 'loaded' && f.family.replace(/^["']|["']$/g, '') === family) loaded = true;
+      });
+      if (loaded) {
+        fontCheck.set(family, true);
+        return true;
+      }
       const ctx = fontProbe || (fontProbe = doc.createElement('canvas').getContext('2d'));
       const probe = 'mmmmmmmmmmlli10WQ@#';
       let ok = false;
@@ -2154,6 +2214,40 @@
       'dominant-baseline': 'auto', visibility: 'visible'
     };
 
+    /** Figma's SVG import drops stroke-dasharray, so trace the visible dashes along the
+     *  browser's own geometry into a plain path. Null when the stroke isn't dashed. */
+    function dashedPath(el, c) {
+      const dash = c.getPropertyValue('stroke-dasharray');
+      if (!dash || dash === 'none' || c.getPropertyValue('stroke') === 'none' || typeof el.getTotalLength !== 'function') return null;
+      let arr = dash.split(/[\s,]+/).map(parseFloat).filter(function (n) { return n >= 0; });
+      if (!arr.some(function (n) { return n > 0; })) return null;
+      if (arr.length % 2) arr = arr.concat(arr);
+      const total = el.getTotalLength();
+      const k = el.hasAttribute('pathLength') ? total / parseFloat(el.getAttribute('pathLength')) : 1;
+      arr = arr.map(function (n) { return n * k; });
+      const period = arr.reduce(function (a, b) { return a + b; }, 0);
+      if (!(total > 0) || total / period > 500) return null; // ponytail: very dense dashes stay solid
+      const r = function (v) { return Math.round(v * 100) / 100; };
+      const seg = function (a, b) {
+        let out = '';
+        const steps = Math.max(1, Math.ceil((b - a) / 2));
+        for (let j = 0; j <= steps; j++) {
+          const pt = el.getPointAtLength(a + (b - a) * j / steps);
+          out += (j ? 'L' : 'M') + r(pt.x) + ' ' + r(pt.y);
+        }
+        return out;
+      };
+      let d = '';
+      let pos = -((((parseFloat(c.getPropertyValue('stroke-dashoffset')) || 0) * k) % period + period) % period);
+      for (let i = 0; pos < total; i++) {
+        const len = arr[i % arr.length];
+        const a = Math.max(pos, 0), b = Math.min(pos + len, total);
+        if (i % 2 === 0 && b > a) d += seg(a, b); // ponytail: zero-length round-cap dots are dropped
+        pos += len;
+      }
+      return d || 'M0 0';
+    }
+
     /** Inline SVG → standalone markup Figma can import as vectors: computed styles
      *  (classes, currentColor) baked into attributes, <use>/external defs resolved. */
     function svgMarkup(svg, w, h) {
@@ -2173,6 +2267,15 @@
           d.setAttribute(p, v.replace(/url\("?[^"#)]*(#[^")]+)"?\)/g, 'url($1)').replace(/(\d)px\b/g, '$1'));
         });
         if (tag === 'use') d.setAttribute('data-h2f-color', c.color);
+        const dashes = dashedPath(s, c);
+        if (dashes) {
+          const path = doc.createElementNS(SVG_NS, 'path');
+          Array.prototype.forEach.call(d.attributes, function (a) {
+            if (!/^(d|cx|cy|r|rx|ry|x|y|x1|y1|x2|y2|width|height|points|pathLength|stroke-dash\w+)$/.test(a.name)) path.setAttribute(a.name, a.value);
+          });
+          path.setAttribute('d', dashes);
+          d.replaceWith(path);
+        }
       });
 
       // <use href="#id"> → inline copy (sprites often live in another <svg> on the page).
@@ -2375,6 +2478,7 @@
       else {
         node.fills.push(solidPaint({ r: 0, g: 0, b: 0, a: 0.06 }));
         node.name += ' (not loaded)';
+        missingImages++;
       }
     }
 
@@ -2723,6 +2827,7 @@
       imageLoads = new Map();
       fontCheck = new Map();
       fontProbe = null;
+      missingImages = 0;
       renderHost.innerHTML = '';
 
       // Scripts stay stripped and the iframe stays script-less by default: a
@@ -2807,10 +2912,19 @@
         return;
       }
 
+      // ponytail: refused even if the runtime (support.js) is picked too; run it under "Run page code" if anyone has it
+      const dc = claudeDesign(html);
+      if (dc && dc.templated) {
+        setStatus(DESIGN_TEMPLATED, 'error');
+        return;
+      }
+
       const opts = { width: clampSize(sizeW.value, 1440), height: clampSize(sizeH.value, 1024), runScripts: runScriptsInput.checked };
       sizeW.value = opts.width;
       sizeH.value = opts.height;
-      scriptsSkipped = !opts.runScripts && /<script\b/i.test(html);
+      // A Claude Design artboard's only code is its runtime, which can't run here anyway.
+      scriptsSkipped = !opts.runScripts && !dc && /<script\b/i.test(html);
+      blobImages = /\burl\(\s*['"]?\/_blob\/|\ssrc=["']?\/_blob\//i.test(html);
       setImporting(true, 'Drawing the page…');
       setStatus('Drawing the page at ' + opts.width + ' × ' + opts.height + '…');
 
@@ -2854,6 +2968,11 @@
         let text = 'Imported · ' + msg.count + ' layers' + (msg.styles ? ' · ' + msg.styles + ' color styles' : '');
         if (msg.missingFonts && msg.missingFonts.length) {
           text += '\nFonts not installed, so a stand-in was used: ' + msg.missingFonts.slice(0, 6).join(', ');
+        }
+        const lost = missingImages + (msg.missingImages || 0);
+        if (lost) {
+          text += '\n' + lost + (lost > 1 ? ' images' : ' image') + " couldn't be loaded" +
+            (blobImages ? ' (images uploaded to Claude Design only load inside Claude Design)' : '') + '.';
         }
         if (scriptsSkipped) text += '\nThis page has code in it. If something looks missing, turn on “Run page code” and import again.';
         setStatus(text, 'ok');

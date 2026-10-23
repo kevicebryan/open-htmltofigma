@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit — Q3 Review</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1920px; font-family: 'Space Grotesk', sans-serif; background: #0b0d12; }
+  .slide { width: 1920px; height: 1080px; position: relative; overflow: hidden; padding: 120px 140px; }
+  .num { position: absolute; right: 140px; bottom: 80px; font-size: 22px; opacity: 0.5; }
+  .brand { position: absolute; left: 140px; bottom: 80px; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; opacity: 0.7; }
+
+  .cover { background: radial-gradient(circle at 80% 20%, #ff5f6d 0%, rgba(255, 95, 109, 0) 45%), linear-gradient(135deg, #1b1f3b 0%, #3a1c71 55%, #0b0d12 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; }
+  .cover .tag { font-size: 26px; letter-spacing: 0.2em; text-transform: uppercase; color: #ffb3ba; font-weight: 500; }
+  .cover h1 { font-size: 150px; line-height: 0.95; font-weight: 700; letter-spacing: -0.04em; margin: 28px 0 36px; max-width: 1300px; }
+  .cover p { font-size: 34px; color: rgba(255, 255, 255, 0.72); max-width: 1000px; line-height: 1.4; }
+  .orb { position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.18); }
+  .orb::after { content: ''; position: absolute; inset: 120px; border-radius: 50%; border: 2px dashed rgba(255, 255, 255, 0.25); }
+
+  .metrics { background: #f4f1ea; color: #14161c; }
+  .metrics h2 { font-size: 72px; letter-spacing: -0.03em; font-weight: 700; }
+  .metrics .lead { font-size: 30px; color: #5c606b; margin-top: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 80px; margin-top: 80px; }
+  .kpi { border-top: 4px solid #14161c; padding-top: 24px; margin-bottom: 44px; }
+  .kpi b { font-size: 96px; font-weight: 700; letter-spacing: -0.03em; display: block; line-height: 1; }
+  .kpi span { font-size: 26px; color: #5c606b; }
+  .chart { background: #fff; border-radius: 28px; padding: 44px; box-shadow: 0 30px 60px rgba(20, 22, 28, 0.08); }
+  .chart h3 { font-size: 28px; font-weight: 500; margin-bottom: 30px; }
+  .cols { display: flex; align-items: flex-end; gap: 28px; height: 420px; border-bottom: 2px solid #e4e0d6; }
+  .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 12px; height: 100%; font-size: 22px; color: #5c606b; }
+  .col i { width: 100%; border-radius: 14px 14px 4px 4px; background: #d9d4c7; display: block; }
+  .col.now i { background: linear-gradient(180deg, #ff5f6d, #3a1c71); }
+  .col.now { color: #14161c; font-weight: 700; }
+  .labels { display: flex; gap: 28px; margin-top: 14px; }
+  .labels span { flex: 1; text-align: center; font-size: 22px; color: #5c606b; }
+
+  .quote { background: #14161c; color: #f4f1ea; display: flex; flex-direction: column; justify-content: center; }
+  .quote .mark { font-size: 260px; line-height: 0.6; color: #ff5f6d; font-weight: 700; height: 120px; }
+  .quote blockquote { font-size: 80px; line-height: 1.12; letter-spacing: -0.02em; max-width: 1500px; font-weight: 500; }
+  .quote blockquote em { font-style: normal; color: #ffb3ba; }
+  .who { display: flex; align-items: center; gap: 24px; margin-top: 60px; font-size: 28px; }
+  .who i { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #ffb347, #ff5f6d); display: block; }
+  .who span { color: rgba(244, 241, 234, 0.6); display: block; font-size: 24px; }
+</style>
+</head>
+<body>
+  <section class="slide cover">
+    <div class="tag">Quarterly business review · Q3 2026</div>
+    <h1>Orbit grew faster than the market again.</h1>
+    <p>Three numbers that matter, what drove them, and where we are placing our bets for Q4.</p>
+    <div class="orb"></div>
+    <div class="brand">ORBIT</div><div class="num">01</div>
+  </section>
+
+  <section class="slide metrics">
+    <h2>Q3 at a glance</h2>
+    <p class="lead">Revenue, retention and efficiency all moved in the right direction.</p>
+    <div class="grid">
+      <div>
+        <div class="kpi"><b>$48.2M</b><span>Net revenue, +31% YoY</span></div>
+        <div class="kpi"><b>118%</b><span>Net dollar retention</span></div>
+        <div class="kpi"><b>0.9×</b><span>Burn multiple, down from 1.6×</span></div>
+      </div>
+      <div class="chart">
+        <h3>Quarterly revenue ($M)</h3>
+        <div class="cols">
+          <div class="col"><span>29.4</span><i style="height: 55%"></i></div>
+          <div class="col"><span>33.1</span><i style="height: 62%"></i></div>
+          <div class="col"><span>36.8</span><i style="height: 69%"></i></div>
+          <div class="col"><span>41.0</span><i style="height: 77%"></i></div>
+          <div class="col now"><span>48.2</span><i style="height: 90%"></i></div>
+        </div>
+        <div class="labels"><span>Q3 ’25</span><span>Q4 ’25</span><span>Q1 ’26</span><span>Q2 ’26</span><span>Q3 ’26</span></div>
+      </div>
+    </div>
+    <div class="brand">ORBIT</div><div class="num">02</div>
+  </section>
+
+  <section class="slide quote">
+    <div class="mark">“</div>
+    <blockquote>We moved our whole forecasting team onto Orbit in a week. <em>It paid for itself before the quarter closed.</em></blockquote>
+    <div class="who"><i></i><div>Priya Raman<span>VP Finance, a sample customer</span></div></div>
+    <div class="brand">ORBIT</div><div class="num">03</div>
+  </section>
+</body>
+</html>
