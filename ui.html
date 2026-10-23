@@ -225,8 +225,54 @@
     .option + .option { border-top: 1px solid var(--line); }
 
     .option-text { flex: 1; min-width: 0; }
-    .option-text b { display: block; font-weight: 800; }
-    .option-text small { display: block; font-size: 10.5px; line-height: 1.35; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .option-text b { font-weight: 800; }
+
+    /* (i) buttons: the row's explanation shows on hover, and stays open after a click until focus moves. */
+    .info {
+      width: 15px;
+      height: 15px;
+      margin: 0 0 0 2px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      vertical-align: 1px;
+      background: var(--well);
+      color: var(--muted);
+      font: italic 800 9.5px/15px Georgia, serif;
+      letter-spacing: 0;
+      text-transform: none;
+      text-align: center;
+      cursor: help;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .info:hover, .info:focus { background: var(--berry); color: #fff; outline: none; }
+    .info:focus-visible { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--berry); }
+
+    .field-label { position: relative; }
+
+    .tip {
+      position: absolute;
+      z-index: 10;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      padding: 8px 11px;
+      border-radius: 12px;
+      background: var(--ink);
+      box-shadow: 0 10px 24px -8px rgba(16, 60, 36, 0.6);
+      color: #fff;
+      font: 600 11px/1.45 var(--font);
+      letter-spacing: 0;
+      text-transform: none;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-3px);
+      transition: opacity 0.15s ease, transform 0.25s var(--spring), visibility 0.15s;
+      pointer-events: none;
+    }
+
+    :is(.field-label, .option):has(.info:hover, .info:focus) .tip { opacity: 1; visibility: visible; transform: none; }
 
     .option input {
       position: absolute;
@@ -319,6 +365,7 @@
       text-overflow: ellipsis;
     }
 
+    .file-meta .desc:empty { display: none; }
     .file-meta .desc { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* The chosen size, editable: typing one switches the viewport to Custom. */
@@ -529,7 +576,7 @@
   <header class="top">
     <div>
       <h1>Open HTML to Figma</h1>
-      <p>Local HTML → nested layers</p>
+      <p>Turn a web page into editable layers</p>
     </div>
     <svg class="mochi" viewBox="0 40 512 480" aria-hidden="true">
       <defs>
@@ -548,7 +595,9 @@
 
   <main class="card">
     <div class="field">
-      <span class="field-label">Viewport
+      <span class="field-label">
+        <span>Screen size <button type="button" class="info" aria-label="More info" aria-describedby="tip-size">i</button></span>
+        <span class="tip" role="tooltip" id="tip-size">How wide the page is drawn, like opening it on that device. Pick one, or type your own width × height.</span>
         <span class="size">
           <input id="size-w" type="number" min="100" max="4000" value="1440" aria-label="Width in pixels" /> ×
           <input id="size-h" type="number" min="100" max="4000" value="1024" aria-label="Height in pixels" />
@@ -568,17 +617,23 @@
 
     <div class="group">
       <label class="option">
-        <span class="option-text"><b>Create as component</b><small>Root frame becomes a component</small></span>
+        <span class="option-text"><b>Make it a component</b> <button type="button" class="info" aria-label="More info" aria-describedby="tip-component">i</button></span>
+        <span class="tip" role="tooltip" id="tip-component">The import becomes a reusable component instead of a plain frame.</span>
         <input id="as-component" type="checkbox" /><span class="switch" aria-hidden="true"></span>
       </label>
       <label class="option">
-        <span class="option-text"><b>Execute page scripts</b><small>Only for trusted, JS-rendered pages</small></span>
+        <span class="option-text"><b>Run page code</b> <button type="button" class="info" aria-label="More info" aria-describedby="tip-scripts">i</button></span>
+        <span class="tip" role="tooltip" id="tip-scripts">Turn on if parts of the page are missing after import, because code builds them when the page opens. Only use it on files you trust.</span>
         <input id="run-scripts" type="checkbox" /><span class="switch" aria-hidden="true"></span>
       </label>
     </div>
 
     <div class="field">
-      <span class="field-label">File <button type="button" class="link" id="pick-folder">or pick its folder</button></span>
+      <span class="field-label">
+        <span>HTML file <button type="button" class="info" aria-label="More info" aria-describedby="tip-file">i</button></span>
+        <span class="tip" role="tooltip" id="tip-file">Pick the page's .html file. If it uses images, fonts or style files saved next to it, pick the whole folder so they come along.</span>
+        <button type="button" class="link" id="pick-folder">or pick the whole folder</button>
+      </span>
       <label class="file-zone" id="file-zone" for="file">
         <input id="file" type="file" multiple accept=".html,.htm,text/html,.css,.js,.svg,image/*,.woff,.woff2,.ttf,.otf" />
         <div class="file-icon">
@@ -591,16 +646,20 @@
           </svg>
         </div>
         <div class="file-meta">
-          <div class="title" id="file-title">Choose HTML file</div>
-          <div class="desc" id="file-desc">.html, plus its CSS / images if local</div>
+          <div class="title" id="file-title">Choose an HTML file</div>
+          <div class="desc" id="file-desc"></div>
         </div>
       </label>
       <input id="folder" type="file" webkitdirectory hidden />
     </div>
 
-    <span class="field-label">Or paste HTML <button type="button" class="link" id="copy-prompt">Copy AI prompt</button></span>
+    <span class="field-label">
+      <span>Or paste code</span>
+      <span class="tip" role="tooltip" id="tip-prompt">Made the page with ChatGPT, Claude or another AI? Copy this, add it to your request, and paste the code you get back here.</span>
+      <span><button type="button" class="link" id="copy-prompt">Copy AI prompt</button> <button type="button" class="info" aria-label="More info" aria-describedby="tip-prompt">i</button></span>
+    </span>
 
-    <textarea id="html" placeholder="Paste your HTML here…" spellcheck="false" aria-label="HTML"></textarea>
+    <textarea id="html" placeholder="Paste HTML code here…" spellcheck="false" aria-label="HTML code"></textarea>
   </main>
 
   <div class="actions">
@@ -612,7 +671,7 @@
       <span id="convert-label">Import to Figma</span>
     </button>
     <div id="status" aria-live="polite">Ready</div>
-    <p class="hint">Install page fonts in Figma for the closest match.</p>
+    <p class="hint">Tip: install the page's fonts on your computer so the text matches.</p>
     <p class="credit">Brewed by <a href="https://www.linkedin.com/in/bryan-kevin/" target="_blank" rel="noopener noreferrer">Kevin</a></p>
   </div>
 
@@ -664,7 +723,7 @@
       return active ? active.getAttribute('data-size') : 'custom';
     }
 
-    // The main thread keeps these in figma.clientStorage. "Execute page scripts" is left out on
+    // The main thread keeps these in figma.clientStorage. "Run page code" is left out on
     // purpose: running a page's scripts should stay a fresh choice for each page.
     function saveSettings() {
       parent.postMessage({ pluginMessage: { type: 'save-settings', settings: {
@@ -697,6 +756,12 @@
       });
     });
     asComponentInput.addEventListener('change', saveSettings);
+
+    // An (i) inside a switch row must not flip the switch. Esc closes an open tip.
+    document.querySelectorAll('.info').forEach(function (btn) {
+      btn.addEventListener('click', function (e) { e.preventDefault(); btn.focus(); });
+      btn.addEventListener('keydown', function (e) { if (e.key === 'Escape') btn.blur(); });
+    });
 
     /** What was pasted, minus a chat's ``` code fence. `react` flags a component rather than a page. */
     function readPasted(text) {
@@ -742,7 +807,7 @@
       }
       setStatus(copied
         ? 'Prompt copied. Add it to your request in the AI chat, then paste the HTML you get back.'
-        : 'Could not copy the prompt here.', copied ? '' : 'error');
+        : "Couldn't copy the prompt.", copied ? '' : 'error');
     });
 
     function setStatus(message, kind) {
@@ -774,8 +839,8 @@
       assetFiles = [];
       sourceName = '';
       fileZone.classList.remove('has-file');
-      fileTitle.textContent = 'Choose HTML file';
-      fileDesc.textContent = '.html, plus its CSS / images if local';
+      fileTitle.textContent = 'Choose an HTML file';
+      fileDesc.textContent = '';
     }
 
     function withTimeout(promise, ms, label) {
@@ -783,7 +848,7 @@
         promise,
         new Promise(function (_, reject) {
           setTimeout(function () {
-            reject(new Error((label || 'Operation') + ' timed out'));
+            reject(new Error((label || 'This') + ' took too long. Try a smaller page.'));
           }, ms);
         })
       ]);
@@ -800,7 +865,7 @@
       })[0];
       if (!page) {
         resetFilePicker();
-        setStatus('Choose an HTML file (.html or .htm). "' + list[0].name + '" is not supported.', 'error');
+        setStatus('"' + list[0].name + '" isn\'t an HTML file. Pick one that ends in .html or .htm.', 'error');
         return;
       }
       try {
@@ -809,12 +874,12 @@
         sourceName = page.name.replace(/\.[^.]+$/, '');
         fileZone.classList.add('has-file');
         fileTitle.textContent = page.name;
-        fileDesc.textContent = Math.max(1, Math.round(page.size / 1024)) + ' KB loaded' +
-          (assetFiles.length ? ' · ' + assetFiles.length + ' local asset' + (assetFiles.length > 1 ? 's' : '') : '');
-        setStatus('File loaded — ready to import');
+        fileDesc.textContent = Math.max(1, Math.round(page.size / 1024)) + ' KB' +
+          (assetFiles.length ? ' · plus ' + assetFiles.length + ' image, font or style file' + (assetFiles.length > 1 ? 's' : '') : '');
+        setStatus('File ready. Click Import to Figma.');
       } catch (err) {
         resetFilePicker();
-        setStatus('Failed to read file: ' + err.message, 'error');
+        setStatus("Couldn't open this file: " + err.message, 'error');
       }
     }
 
@@ -2668,19 +2733,19 @@
       iframe.style.cssText = 'display:block;border:0;width:' + opts.width + 'px;height:' + opts.height + 'px;opacity:0;pointer-events:none;';
       renderHost.appendChild(iframe);
 
-      setStatus('Loading page assets…');
+      setStatus('Loading images and fonts…');
       try {
         const loaded = waitForIframeLoad(iframe);
         iframe.srcdoc = source;
         await loaded;
         doc = iframe.contentDocument;
         win = iframe.contentWindow;
-        if (!doc || !win || !doc.body) throw new Error('Could not access the HTML preview.');
+        if (!doc || !win || !doc.body) throw new Error("Couldn't open a preview of the page. Try again.");
         const style = doc.createElement('style');
         style.textContent = '[data-h2f~="b"]::before{content:none!important}[data-h2f~="a"]::after{content:none!important}';
         (doc.head || doc.documentElement).appendChild(style);
         if (opts.runScripts) {
-          setStatus('Running page scripts…');
+          setStatus("Running the page's code…");
           await waitForDomToSettle();
         }
         await waitForPageAssets();
@@ -2689,7 +2754,7 @@
         freezePage();
         await sleep(50);
         win.scrollTo(0, 0);
-        setStatus('Measuring layout…');
+        setStatus('Working out the layout…');
         return await serializePage(opts);
       } finally {
         renderHost.innerHTML = '';
@@ -2710,7 +2775,7 @@
       if (!(fills[0] && fills[0].type === 'SOLID' && fills[0].color.a > 0.999)) fills.unshift(solidPaint({ r: 1, g: 1, b: 1, a: 1 }));
       const bodyNode = await serializeElement(body, null);
       if (!bodyNode) {
-        throw new Error('Layout measured an empty page. Try again, or paste a full HTML document with inline CSS.');
+        throw new Error('The page came out empty. Try again, or paste the full page code with its styles included.');
       }
       return { type: 'frame', name: 'Page', x: 0, y: 0, w: w, h: h, fills: fills, effects: [], clip: true, children: [bodyNode] };
     }
@@ -2720,13 +2785,13 @@
       const pasted = readPasted(htmlInput.value);
       const html = pasted.html;
       if (!html) {
-        setStatus('Choose an HTML file to import, or paste HTML below.', 'error');
+        setStatus('Pick an HTML file or paste some code first.', 'error');
         fileInput.click();
         return;
       }
 
       if (pasted.react) {
-        setStatus('This looks like React code, not HTML. Ask your AI for one self-contained HTML file instead: “Copy AI prompt” has the wording.', 'error');
+        setStatus('This is React code, which can\'t be imported as is. Click “Copy AI prompt”, add it to your AI chat, and ask for the page again.', 'error');
         return;
       }
 
@@ -2734,12 +2799,12 @@
       sizeW.value = opts.width;
       sizeH.value = opts.height;
       scriptsSkipped = !opts.runScripts && /<script\b/i.test(html);
-      setImporting(true, 'Rendering page…');
-      setStatus('Rendering at ' + opts.width + ' × ' + opts.height + '…');
+      setImporting(true, 'Drawing the page…');
+      setStatus('Drawing the page at ' + opts.width + ' × ' + opts.height + '…');
 
       try {
         const page = await inlineAssets(html, assetFiles);
-        const tree = await withTimeout(captureHtmlTree(page, opts), 90000, 'Render');
+        const tree = await withTimeout(captureHtmlTree(page, opts), 90000, 'Drawing the page');
         setImporting(true, 'Creating Figma layers…');
         setStatus('Importing…');
         parent.postMessage({
@@ -2756,7 +2821,7 @@
         importTimeout = setTimeout(function () {
           setImporting(false);
           setStatus(
-            'Figma did not finish the import. Try a smaller self-contained HTML file, then run the plugin again.',
+            "Figma didn't finish the import. Try a smaller page, then open the plugin again.",
             'error'
           );
         }, 120000);
@@ -2774,11 +2839,11 @@
       if (msg.type !== 'done' && msg.type !== 'error') return;
       setImporting(false);
       if (msg.type === 'done') {
-        let text = 'Imported · ' + msg.count + ' layers' + (msg.styles ? ' · ' + msg.styles + ' colors' : '');
+        let text = 'Imported · ' + msg.count + ' layers' + (msg.styles ? ' · ' + msg.styles + ' color styles' : '');
         if (msg.missingFonts && msg.missingFonts.length) {
-          text += '\nNot in Figma (substituted): ' + msg.missingFonts.slice(0, 6).join(', ');
+          text += '\nFonts not installed, so a stand-in was used: ' + msg.missingFonts.slice(0, 6).join(', ');
         }
-        if (scriptsSkipped) text += '\nThis page has scripts. If something is missing, tick “Execute page scripts”.';
+        if (scriptsSkipped) text += '\nThis page has code in it. If something looks missing, turn on “Run page code” and import again.';
         setStatus(text, 'ok');
       } else if (msg.type === 'error') {
         setStatus(msg.message, 'error');

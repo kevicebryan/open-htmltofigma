@@ -8,7 +8,7 @@ Not in scope: URL crawling, site-wide import, or rewriting flex as Figma Auto La
 
 ## Pipeline
 
-1. **UI** (`ui.html`) loads the HTML into a sandboxed iframe sized like a real window (e.g. 1440×1024), so media queries, `vh` units and fixed elements match a browser. Picked local files are inlined first; with **Execute page scripts**, an `IntersectionObserver` shim runs before the page's own scripts.
+1. **UI** (`ui.html`) loads the HTML into a sandboxed iframe sized like a real window (e.g. 1440×1024), so media queries, `vh` units and fixed elements match a browser. Picked local files are inlined first; with **Run page code**, an `IntersectionObserver` shim runs before the page's own scripts.
 2. Wait for fonts and images (lazy images forced eager), then settle the page: finish entrance animations and transitions, pause loops at their first frame, and stop timers.
 3. Walk the DOM (including open shadow roots). For each rendered box, record:
    - its border box from `getBoundingClientRect()`, measured with rotation/scale temporarily cleared (the transform is sent separately and re-applied in Figma)
