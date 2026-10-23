@@ -93,8 +93,8 @@
         ui.claudeDesign('<p>{{not a design}}</p>') === null);
 
       // A family whose only loaded face is 800 (its 400 face is declared but never used) is still the page's font.
-      const nunito = Array.from(ui.document.styleSheets).flatMap(s => Array.from(s.cssRules))
-        .find(r => r instanceof ui.CSSFontFaceRule && /Nunito/.test(r.style.getPropertyValue('font-family'))).style.getPropertyValue('src');
+      // nunito.woff2: Nunito (latin subset) © The Nunito Project Authors, SIL Open Font License 1.1.
+      const nunito = 'url(' + new URL('nunito.woff2', location.href) + ')';
       const heavy = await ui.captureHtmlTree('<style>@font-face{font-family:Probe;font-weight:400;src:url(missing-probe.woff2)}' +
         '@font-face{font-family:Probe;font-weight:800;src:' + nunito + '}</style><p style="font:800 40px Probe, serif">Heavy</p>',
         { width: 400, height: 200, runScripts: false });
